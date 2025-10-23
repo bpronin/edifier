@@ -6,24 +6,25 @@ use windows::Win32::Devices::Bluetooth::{
     BLUETOOTH_FIND_RADIO_PARAMS, BTHPROTO_RFCOMM, SOCKADDR_BTH,
 };
 use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE};
+use windows::Win32::Networking::WinSock;
 use windows::Win32::Networking::WinSock::{
-    closesocket, connect, recv, send, socket, WSACleanup, WSAGetLastError,
-    WSAStartup, INVALID_SOCKET, SEND_RECV_FLAGS, SOCKADDR, SOCKET, SOCKET_ERROR, SOCK_STREAM, WSADATA,
+    WSACleanup, WSAGetLastError, WSAStartup, INVALID_SOCKET, SEND_RECV_FLAGS, SOCKADDR, SOCKET,
+    SOCKET_ERROR, SOCK_STREAM, WSADATA,
 };
 use windows_core::GUID;
 
-pub(crate) fn open_socket(spp_uuid: GUID) -> Result<SOCKET, String> {
+pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
     unsafe {
         let mut wsa_data: WSADATA = zeroed();
         let startup_result = WSAStartup(0x202, &mut wsa_data); /* 0x202 = MAKEWORD(2,2) */
         if startup_result != 0 {
-            return Err(format!("WSAStartup failed: {}", startup_result));
+            return Err(format!("WSAStartup failed: {}.", startup_result));
         }
 
-        let socket = socket(AF_BTH as i32, SOCK_STREAM, BTHPROTO_RFCOMM as i32)
+        let socket = WinSock::socket(AF_BTH as i32, SOCK_STREAM, BTHPROTO_RFCOMM as i32)
             .map_err(|e| e.to_string())?;
         if socket == INVALID_SOCKET {
-            return Err("Invalid socket".into());
+            return Err("Invalid socket.".to_string());
         }
 
         let mut address: SOCKADDR_BTH = zeroed();
@@ -31,50 +32,48 @@ pub(crate) fn open_socket(spp_uuid: GUID) -> Result<SOCKET, String> {
         address.btAddr = find_device_address(spp_uuid)?;
         address.serviceClassId = spp_uuid;
 
-        let connect_result = connect(
+        let connect_result = WinSock::connect(
             socket,
             &address as *const SOCKADDR_BTH as *const SOCKADDR,
             size_of::<SOCKADDR_BTH>() as i32,
         );
         if connect_result == SOCKET_ERROR {
-            return Err("Unable to connect to BT device".into());
+            return Err("Unable to connect to device.".to_string());
         }
 
         Ok(socket)
     }
 }
 
-pub(crate) fn close_socket(sock: SOCKET) {
+pub(crate) fn disconnect(sock: SOCKET) {
     unsafe {
-        closesocket(sock);
+        WinSock::closesocket(sock);
         WSACleanup();
     }
 }
 
-pub(crate) fn read_socket(socket: SOCKET) -> Result<Vec<u8>, String> {
+pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
     unsafe {
+        let bytes_sent = WinSock::send(socket, data, SEND_RECV_FLAGS(0));
+        if bytes_sent == SOCKET_ERROR {
+            return Err(format!("Write error: {:?}.", WSAGetLastError()));
+        }
+
         let mut buffer = [0u8; 256];
-        let bytes_read = recv(socket, &mut buffer, SEND_RECV_FLAGS(0));
+        let bytes_read = WinSock::recv(socket, &mut buffer, SEND_RECV_FLAGS(0));
         if bytes_read == SOCKET_ERROR {
-            return Err(format!("Read error: {:?}", WSAGetLastError()));
+            return Err(format!("Read error: {:?}.", WSAGetLastError()));
         }
 
         let result = buffer[..bytes_read as usize].to_vec();
+
         Ok(result)
     }
 }
 
-pub(crate) fn write_socket(socket: SOCKET, data: &[u8]) -> Result<(), String> {
-    unsafe {
-        let bytes_sent = send(socket, data, SEND_RECV_FLAGS(0));
-        if bytes_sent == SOCKET_ERROR {
-            return Err(format!("Write error: {:?}", WSAGetLastError()));
-        }
-    }
-
-    Ok(())
-}
-
+///
+/// Looks for first devise providing service with specified SPP UUID.
+///
 fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
     unsafe {
         let find_radio_params = BLUETOOTH_FIND_RADIO_PARAMS {
@@ -84,7 +83,7 @@ fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
         let find_radio_handle = BluetoothFindFirstRadio(&find_radio_params, &mut radio_handle)
             .map_err(|e| e.to_string())?;
         if find_radio_handle.is_invalid() {
-            return Err("No bluetooth-radio".into());
+            return Err("No bluetooth radio.".to_string());
         }
 
         let device_search_params = BLUETOOTH_DEVICE_SEARCH_PARAMS {
@@ -128,7 +127,7 @@ fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
         BluetoothFindRadioClose(find_radio_handle).map_err(|e| e.to_string())?;
     }
 
-    Err("Not found".into())
+    Err("No devices found.".into())
 }
 
 fn has_spp_service(
@@ -138,6 +137,7 @@ fn has_spp_service(
 ) -> bool {
     let mut guids = [GUID::default(); 10];
     let mut guids_count = guids.len() as u32;
+
     unsafe {
         let result = BluetoothEnumerateInstalledServices(
             radio_handle.into(),
