@@ -7,3 +7,5 @@ edition = "2024"
 windows = { version = "0.62.2", features = ["Win32_Networking_WinSock", "Win32_Devices_Bluetooth", "Win32_Foundation", "Win32_Networking"] }
 windows-core = "0.62.2"
 argh = "0.1.13"
+strum = "0.27.2"
+strum_macros = "0.27.2"

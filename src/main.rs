@@ -1,4 +1,4 @@
-use crate::device::EdifierClient;
+use crate::device::{EdifierClient, GameMode, PlaybackStatus};
 use argh::FromArgs;
 use std::env;
 use std::io::Write;
@@ -19,6 +19,14 @@ struct Args {
     /// set device name
     #[argh(option)]
     set_name: Option<String>,
+
+    /// set prompt volume
+    #[argh(option)]
+    set_prompt_volume: Option<u8>,
+
+    /// set game mode
+    #[argh(option)]
+    set_game_mode: Option<GameMode>,
 
     /// disconnect device
     #[argh(switch)]
@@ -61,6 +69,16 @@ fn main() {
         println!("Device name set to: {}.", name);
     }
 
+    if let Some(volume) = args.set_prompt_volume {
+        client.set_prompt_volume(volume).unwrap();
+        println!("Prompt volume set to: {}.", volume);
+    }
+
+    if let Some(mode) = args.set_game_mode {
+        client.set_game_mode(mode).unwrap();
+        println!("Game mode set to: {}.", mode);
+    }
+
     if args.disconnect {
         client.disconnect_bluetooth().unwrap();
         println!("Device disconnected.");
@@ -92,6 +110,8 @@ fn print_info(client: EdifierClient) -> Result<(), String> {
     println!("Battery level: {}%", client.get_battery_level()?);
     println!("Firmware version: {}", client.get_firmware_version()?);
     println!("Fingerprint: {}", client.get_fingerprint()?);
+    println!("Prompt volume: {}", client.get_prompt_volume()?);
+    println!("Game mode: {}", client.get_game_mode()?);
 
     Ok(())
 }

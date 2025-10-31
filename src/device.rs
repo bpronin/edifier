@@ -1,5 +1,9 @@
 ﻿use crate::bluetooth;
 use crate::message::EdifierMessage;
+use std::fmt::{Display, Pointer};
+use std::str::FromStr;
+use argh::FromArgs;
+use strum_macros::{AsRefStr, Display, EnumString, FromRepr};
 use windows::Win32::Networking::WinSock::SOCKET;
 use windows_core::GUID;
 
@@ -30,38 +34,43 @@ const CMD_GET_FINGERPRINT: u8 = 0xD8;
 const CMD_GET_BUTTON_CONTROL: u8 = 0xF0;
 const CMD_SET_BUTTON_CONTROL: u8 = 0xF1;
 
+#[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[strum(ascii_case_insensitive)]
 pub enum PlaybackStatus {
     Stopped = 0x03,
     Playing = 0x0D,
 }
 
+#[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[strum(ascii_case_insensitive)]
 pub enum GameMode {
     Off = 0x00,
     On = 0x01,
 }
 
+#[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[strum(ascii_case_insensitive)]
 pub enum LdacMode {
     Off = 0x00,
     K48 = 0x01,
     K96 = 0x02,
 }
 
+#[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[strum(ascii_case_insensitive)]
 pub enum NoiseCancellationMode {
     Off = 0x01,
     On = 0x02,
     Ambient = 0x03,
 }
 
+#[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[strum(ascii_case_insensitive)]
 pub enum EqMode {
     Classic = 0x00,
     Pop = 0x01,
@@ -69,8 +78,9 @@ pub enum EqMode {
     Rock = 0x03,
 }
 
+#[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[strum(ascii_case_insensitive)]
 pub enum AmbientVolume {
     Plus3 = 0x09,
     Plus2 = 0x08,
@@ -81,8 +91,9 @@ pub enum AmbientVolume {
     Minus3 = 0x03,
 }
 
+#[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[strum(ascii_case_insensitive)]
 pub enum KeyControlSet {
     All = 0x07,
     AmbientAndCancellation = 0x06,
@@ -92,31 +103,6 @@ pub enum KeyControlSet {
     CancellationAndAmbient = 0x02,
     CancellationAndOff = 0x01,
 }
-
-// Дополнительные реализации для удобства
-// impl TryFrom<u8> for PlaybackStatus {
-//     type Error = ();
-//
-//     fn try_from(value: u8) -> Result<Self, Self::Error> {
-//         match value {
-//             0x03 => Ok(Self::Stopped),
-//             0x0D => Ok(Self::Playing),
-//             _ => Err(()),
-//         }
-//     }
-// }
-//
-// impl TryFrom<u8> for GameMode {
-//     type Error = ();
-//
-//     fn try_from(value: u8) -> Result<Self, Self::Error> {
-//         match value {
-//             0x00 => Ok(Self::Off),
-//             0x01 => Ok(Self::On),
-//             _ => Err(()),
-//         }
-//     }
-// }
 
 static SPP_UUID: GUID = GUID::from_u128(0xEDF00000_EDFE_DFED_FEDF_EDFEDFEDFEDF);
 
@@ -160,9 +146,8 @@ impl EdifierClient {
 
     pub(crate) fn get_battery_level(&self) -> Result<u8, String> {
         let response = self.send(CMD_GET_BATTERY_LEVEL, None)?;
-        let payload = response.payload().unwrap();
 
-        Ok(payload[0])
+        Ok(response.payload().unwrap()[0])
     }
 
     pub(crate) fn get_firmware_version(&self) -> Result<String, String> {
@@ -187,6 +172,32 @@ impl EdifierClient {
             .join(" ");
 
         Ok(result)
+    }
+
+    pub(crate) fn get_game_mode(&self) -> Result<GameMode, String> {
+        let response = self.send(CMD_GET_GAME_MODE, None)?;
+        let v = response.payload().unwrap()[0];
+        let mode = GameMode::from_repr(v).unwrap();
+
+        Ok(mode)
+    }
+
+    pub(crate) fn set_game_mode(&self, mode: GameMode) -> Result<(), String> {
+        self.send(CMD_SET_GAME_MODE, Some(&[mode as u8]))?;
+
+        Ok(())
+    }
+
+    pub(crate) fn get_prompt_volume(&self) -> Result<u8, String> {
+        let response = self.send(CMD_GET_PROMPT_VOLUME, None)?;
+
+        Ok(response.payload().unwrap()[0])
+    }
+
+    pub(crate) fn set_prompt_volume(&self, volume: u8) -> Result<(), String> {
+        self.send(CMD_SET_PROMPT_VOLUME, Some(&[volume]))?;
+
+        Ok(())
     }
 
     pub(crate) fn re_pair(&self) -> Result<(), String> {
@@ -273,6 +284,28 @@ mod test {
         let client = EdifierClient::new().unwrap();
 
         let result = client.get_battery_level();
+
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_prompt_volume() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.get_prompt_volume();
+
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_prompt_volume() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.set_prompt_volume(2);
 
         println!("{:?}", result);
         assert!(result.is_ok());
