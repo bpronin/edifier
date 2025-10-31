@@ -2,7 +2,7 @@
 macro_rules! print_discardable {
     ($($arg:tt)*) => {{
         print!($($arg)*);
-        $crate::io::stdout().flush().unwrap();
+        std::io::stdout().flush().unwrap();
     }};
 }
 

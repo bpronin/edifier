@@ -140,6 +140,12 @@ impl EdifierClient {
         Ok(result)
     }
 
+    pub(crate) fn set_device_name(&self, name: &str) -> Result<(), String> {
+        self.send(CMD_SET_NAME, name.as_bytes().into())?;
+
+        Ok(())
+    }
+
     pub(crate) fn get_mac_address(&self) -> Result<String, String> {
         let response = self.send(CMD_GET_MAC_ADDRESS, None)?;
         let payload = response.payload().unwrap();
@@ -152,10 +158,35 @@ impl EdifierClient {
         Ok(result)
     }
 
-    pub(crate) fn set_device_name(&self, name: &str) -> Result<(), String> {
-        self.send(CMD_SET_NAME, name.as_bytes().into())?;
+    pub(crate) fn get_battery_level(&self) -> Result<u8, String> {
+        let response = self.send(CMD_GET_BATTERY_LEVEL, None)?;
+        let payload = response.payload().unwrap();
 
-        Ok(())
+        Ok(payload[0])
+    }
+
+    pub(crate) fn get_firmware_version(&self) -> Result<String, String> {
+        let response = self.send(CMD_GET_FIRMWARE_VERSION, None)?;
+        let payload = response.payload().unwrap();
+        let result = payload
+            .iter()
+            .map(|b| b.to_string())
+            .collect::<Vec<String>>()
+            .join(".");
+
+        Ok(result)
+    }
+
+    pub(crate) fn get_fingerprint(&self) -> Result<String, String> {
+        let response = self.send(CMD_GET_FINGERPRINT, None)?;
+        let payload = response.payload().unwrap();
+        let result = payload
+            .iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        Ok(result)
     }
 
     pub(crate) fn power_off_device(&self) -> Result<(), String> {
@@ -213,6 +244,17 @@ mod test {
         let client = EdifierClient::new().unwrap();
 
         let result = client.get_mac_address();
+
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_battery_level() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.get_battery_level();
 
         println!("{:?}", result);
         assert!(result.is_ok());

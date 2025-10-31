@@ -1,7 +1,7 @@
 use crate::device::EdifierClient;
 use argh::FromArgs;
 use std::io::Write;
-use std::{env, io};
+use std::{env};
 
 mod bluetooth;
 mod device;
@@ -61,4 +61,7 @@ fn main() {
 fn print_info(client: EdifierClient) {
     println!("Device name: {}", client.get_device_name().unwrap());
     println!("Mac address: {}", client.get_mac_address().unwrap());
+    println!("Battery level: {}%", client.get_battery_level().unwrap());
+    println!("Firmware version: {}", client.get_firmware_version().unwrap());
+    println!("Fingerprint: {}", client.get_fingerprint().unwrap());
 }
