@@ -189,8 +189,26 @@ impl EdifierClient {
         Ok(result)
     }
 
-    pub(crate) fn power_off_device(&self) -> Result<(), String> {
+    pub(crate) fn re_pair(&self) -> Result<(), String> {
+        self.send(CMD_RE_PAIR, None)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn disconnect_bluetooth(&self) -> Result<(), String> {
+        self.send(CMD_DISCONNECT_BLUETOOTH, None)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn power_off(&self) -> Result<(), String> {
         self.send(CMD_POWER_OFF, None)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn reset_factory_defaults(&self) -> Result<(), String> {
+        self.send(CMD_RESET_FACTORY_DEFAULTS, None)?;
 
         Ok(())
     }
