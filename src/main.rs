@@ -1,32 +1,38 @@
-use crate::device::{EdifierClient, GameMode, PlaybackStatus};
+use crate::device::{EdifierClient, GameMode, LdacMode, NoiseCancellationMode};
 use argh::FromArgs;
 use std::env;
-use std::io::Write;
 
 mod bluetooth;
 mod device;
 mod message;
 mod utils;
 
-#[derive(FromArgs)]
 /// Tool to control Edifier devices
-///
+#[derive(FromArgs)]
 struct Args {
     /// print device current status
     #[argh(switch, short = 'i')]
     info: bool,
 
     /// set device name
-    #[argh(option)]
-    set_name: Option<String>,
+    #[argh(option, short = 'n')]
+    name: Option<String>,
 
     /// set prompt volume
-    #[argh(option)]
-    set_prompt_volume: Option<u8>,
+    #[argh(option, short = 'p')]
+    prompt_volume: Option<u8>,
 
-    /// set game mode
-    #[argh(option)]
-    set_game_mode: Option<GameMode>,
+    /// set game mode (on/off)
+    #[argh(option, short = 'g')]
+    game: Option<GameMode>,
+
+    /// set LDAC mode (k48/k96/off)
+    #[argh(option, short = 'l')]
+    ldac: Option<LdacMode>,
+
+    /// set noise cancellation mode (on/off/ambient)
+    #[argh(option, short = 'c')]
+    noise_cancellation: Option<NoiseCancellationMode>,
 
     /// disconnect device
     #[argh(switch)]
@@ -64,19 +70,29 @@ fn main() {
 
     let args: Args = argh::from_env();
 
-    if let Some(name) = args.set_name {
+    if let Some(name) = args.name {
         client.set_device_name(name.as_str()).unwrap();
         println!("Device name set to: {}.", name);
     }
 
-    if let Some(volume) = args.set_prompt_volume {
+    if let Some(volume) = args.prompt_volume {
         client.set_prompt_volume(volume).unwrap();
         println!("Prompt volume set to: {}.", volume);
     }
 
-    if let Some(mode) = args.set_game_mode {
+    if let Some(mode) = args.game {
         client.set_game_mode(mode).unwrap();
         println!("Game mode set to: {}.", mode);
+    }
+
+    if let Some(mode) = args.ldac {
+        client.set_ldac_mode(mode).unwrap();
+        println!("LDAC mode set to: {}.", mode);
+    }
+
+    if let Some(mode) = args.noise_cancellation {
+        client.set_noise_cancellation_mode(mode).unwrap();
+        println!("Noise cancellation mode set to: {}.", mode);
     }
 
     if args.disconnect {
@@ -112,6 +128,8 @@ fn print_info(client: EdifierClient) -> Result<(), String> {
     println!("Fingerprint: {}", client.get_fingerprint()?);
     println!("Prompt volume: {}", client.get_prompt_volume()?);
     println!("Game mode: {}", client.get_game_mode()?);
+    println!("LDAC mode: {}", client.get_ldac_mode()?);
+    println!("Noise cancellation mode: {}", client.get_noise_mode()?);
 
     Ok(())
 }

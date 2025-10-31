@@ -1,9 +1,7 @@
 ﻿use crate::bluetooth;
 use crate::message::EdifierMessage;
 use std::fmt::{Display, Pointer};
-use std::str::FromStr;
-use argh::FromArgs;
-use strum_macros::{AsRefStr, Display, EnumString, FromRepr};
+use strum_macros::{Display, EnumString, FromRepr};
 use windows::Win32::Networking::WinSock::SOCKET;
 use windows_core::GUID;
 
@@ -176,14 +174,45 @@ impl EdifierClient {
 
     pub(crate) fn get_game_mode(&self) -> Result<GameMode, String> {
         let response = self.send(CMD_GET_GAME_MODE, None)?;
-        let v = response.payload().unwrap()[0];
-        let mode = GameMode::from_repr(v).unwrap();
+        let value = response.payload().unwrap()[0];
+        let mode = GameMode::from_repr(value).unwrap();
 
         Ok(mode)
     }
 
     pub(crate) fn set_game_mode(&self, mode: GameMode) -> Result<(), String> {
         self.send(CMD_SET_GAME_MODE, Some(&[mode as u8]))?;
+
+        Ok(())
+    }
+
+    pub(crate) fn get_ldac_mode(&self) -> Result<LdacMode, String> {
+        let response = self.send(CMD_GET_LDAC_MODE, None)?;
+        let value = response.payload().unwrap()[0];
+        let mode = LdacMode::from_repr(value).unwrap();
+
+        Ok(mode)
+    }
+
+    pub(crate) fn set_ldac_mode(&self, mode: LdacMode) -> Result<(), String> {
+        self.send(CMD_SET_LDAC_MODE, Some(&[mode as u8]))?;
+
+        Ok(())
+    }
+
+    pub(crate) fn get_noise_mode(&self) -> Result<NoiseCancellationMode, String> {
+        let response = self.send(CMD_GET_NOISE_MODE, None)?;
+        let value = response.payload().unwrap()[0];
+        let mode = NoiseCancellationMode::from_repr(value).unwrap();
+
+        Ok(mode)
+    }
+
+    pub(crate) fn set_noise_cancellation_mode(
+        &self,
+        mode: NoiseCancellationMode,
+    ) -> Result<(), String> {
+        self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8]))?;
 
         Ok(())
     }
