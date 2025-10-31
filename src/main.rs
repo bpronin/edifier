@@ -1,10 +1,13 @@
 use crate::device::EdifierClient;
 use argh::FromArgs;
-use std::env;
+use std::{env, io, thread};
+use std::io::Write;
+use std::time::Duration;
 
 mod bluetooth;
 mod device;
 mod message;
+mod utils;
 
 #[derive(FromArgs)]
 /// Tool to control Edifier devices
@@ -24,11 +27,15 @@ struct Args {
 }
 
 fn main() {
-    let mut client = EdifierClient::default();
-    if let Err(e) = client.connect() {
+    print_flush!("Connecting...");
+
+    let client = EdifierClient::new().unwrap_or_else(|e| {
+        print_discard!();
         println!("{}", e);
-        return;
-    }
+        std::process::exit(1);
+    });
+
+    print_discard!();
 
     /* no args */
     if env::args().count() <= 1 {

@@ -1,6 +1,6 @@
 ﻿#[derive(Debug, PartialEq, Eq)]
 pub struct EdifierMessage {
-    pub(crate) bytes: Vec<u8>,
+    bytes: Vec<u8>,
 }
 
 impl EdifierMessage {
@@ -54,6 +54,16 @@ impl EdifierMessage {
     //         self.bytes[self.bytes.len() - 1],
     //     ])
     // }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
+}
+
+impl From<Vec<u8>> for EdifierMessage {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self { bytes }
+    }
 }
 
 fn compute_crc(data: &[u8]) -> u16 {
@@ -69,7 +79,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_build_request() {
+    fn test_new() {
         assert_eq!(
             EdifierMessage::new(0xC9, None).bytes,
             vec![0xAA, 0x01, 0xC9, 0x21, 0x8D]
@@ -84,17 +94,13 @@ mod test {
         );
     }
 
-    // #[test]
-    // fn test_parse_response() {
-    //     assert_eq!(
-    //         EdifierMessage::from(vec![0xAA, 0x01, 0xC9, 0x21, 0x8D]),
-    //         EdifierMessage {
-    //             signature: 0xAA,
-    //             size: 0x1,
-    //             command_code: 0xC9,
-    //             payload: None,
-    //             crc: 0x218D,
-    //         }
-    //     );
-    // }
+    #[test]
+    fn test_from() {
+        assert_eq!(
+            EdifierMessage::from(vec![0xAA, 0x01, 0xC9, 0x21, 0x8D]),
+            EdifierMessage {
+                bytes: vec![0xAA, 0x01, 0xC9, 0x21, 0x8D],
+            }
+        );
+    }
 }
