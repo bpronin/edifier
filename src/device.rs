@@ -14,7 +14,7 @@ const CMD_GET_LDAC_MODE: u8 = 0x48;
 const CMD_SET_LDAC_MODE: u8 = 0x49;
 const CMD_SET_NOISE_MODE: u8 = 0xC1;
 const CMD_GET_PLAYBACK_STATUS: u8 = 0xC3;
-const CMD_SET_EQ_MODE: u8 = 0xC4;
+const CMD_SET_EQUALIZER_PRESET: u8 = 0xC4;
 const CMD_GET_FIRMWARE_VERSION: u8 = 0xC6;
 const CMD_GET_MAC_ADDRESS: u8 = 0xC8;
 const CMD_GET_NAME: u8 = 0xC9;
@@ -27,10 +27,10 @@ const CMD_GET_BATTERY_LEVEL: u8 = 0xD0;
 const CMD_SET_AUTO_POWER_OFF_TIME: u8 = 0xD1;
 const CMD_DISABLE_AUTO_POWER_OFF: u8 = 0xD2;
 const CMD_GET_AUTO_POWER_OFF_TIME: u8 = 0xD3;
-const CMD_GET_EQ_MODE: u8 = 0xD5;
+const CMD_GET_EQUALIZER_PRESET: u8 = 0xD5;
 const CMD_GET_FINGERPRINT: u8 = 0xD8;
-const CMD_GET_BUTTON_CONTROL: u8 = 0xF0;
-const CMD_SET_BUTTON_CONTROL: u8 = 0xF1;
+const CMD_GET_BUTTON_CONTROL_SET: u8 = 0xF0;
+const CMD_SET_BUTTON_CONTROL_SET: u8 = 0xF1;
 
 #[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
@@ -60,7 +60,7 @@ pub enum LdacMode {
 #[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
-pub enum NoiseCancellationMode {
+pub enum NoiseMode {
     Off = 0x01,
     On = 0x02,
     Ambient = 0x03,
@@ -69,8 +69,8 @@ pub enum NoiseCancellationMode {
 #[derive(Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
-pub enum EqMode {
-    Classic = 0x00,
+pub enum EqualizerPreset {
+    Default = 0x00, /* AKA "Classic" */
     Pop = 0x01,
     Classical = 0x02,
     Rock = 0x03,
@@ -200,19 +200,30 @@ impl EdifierClient {
         Ok(())
     }
 
-    pub(crate) fn get_noise_mode(&self) -> Result<NoiseCancellationMode, String> {
+    pub(crate) fn get_noise_mode(&self) -> Result<NoiseMode, String> {
         let response = self.send(CMD_GET_NOISE_MODE, None)?;
         let value = response.payload().unwrap()[0];
-        let mode = NoiseCancellationMode::from_repr(value).unwrap();
+        let mode = NoiseMode::from_repr(value).unwrap();
 
         Ok(mode)
     }
 
-    pub(crate) fn set_noise_cancellation_mode(
-        &self,
-        mode: NoiseCancellationMode,
-    ) -> Result<(), String> {
+    pub(crate) fn set_noise_mode(&self, mode: NoiseMode) -> Result<(), String> {
         self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8]))?;
+
+        Ok(())
+    }
+
+   pub(crate) fn get_equalizer_preset(&self) -> Result<EqualizerPreset, String> {
+        let response = self.send(CMD_GET_EQUALIZER_PRESET, None)?;
+        let value = response.payload().unwrap()[0];
+        let mode = EqualizerPreset::from_repr(value).unwrap();
+
+        Ok(mode)
+    }
+
+    pub(crate) fn set_equalizer_preset(&self, mode: EqualizerPreset) -> Result<(), String> {
+        self.send(CMD_SET_EQUALIZER_PRESET, Some(&[mode as u8]))?;
 
         Ok(())
     }

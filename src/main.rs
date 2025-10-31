@@ -1,4 +1,4 @@
-use crate::device::{EdifierClient, GameMode, LdacMode, NoiseCancellationMode};
+use crate::device::{EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseMode};
 use argh::FromArgs;
 use std::env;
 
@@ -7,47 +7,52 @@ mod device;
 mod message;
 mod utils;
 
-/// Tool to control Edifier devices
 #[derive(FromArgs)]
+#[argh(description = "Tool to control Edifier devices")]
 struct Args {
-    /// print device current status
-    #[argh(switch, short = 'i')]
+    #[argh(switch, description = "print device current status")]
     info: bool,
 
-    /// set device name
-    #[argh(option, short = 'n')]
+    #[argh(option, description = "set device name")]
     name: Option<String>,
 
-    /// set prompt volume
-    #[argh(option, short = 'p')]
+    #[argh(option, description = "set prompt volume [0..15]", arg_name = "0..15")]
     prompt_volume: Option<u8>,
 
-    /// set game mode (on/off)
-    #[argh(option, short = 'g')]
+    #[argh(option, description = "set game mode [on|off]", arg_name = "on|off")]
     game: Option<GameMode>,
 
-    /// set LDAC mode (k48/k96/off)
-    #[argh(option, short = 'l')]
+    #[argh(
+        option,
+        description = "set LDAC mode [k48|k96|off]",
+        arg_name = "k48|k96|off"
+    )]
     ldac: Option<LdacMode>,
 
-    /// set noise cancellation mode (on/off/ambient)
-    #[argh(option, short = 'c')]
-    noise_cancellation: Option<NoiseCancellationMode>,
+    #[argh(
+        option,
+        description = "set noise cancellation mode [on|off|ambient]",
+        arg_name = "on|off|ambient"
+    )]
+    noise_cancel: Option<NoiseMode>,
 
-    /// disconnect device
-    #[argh(switch)]
+    #[argh(
+        option,
+        description = "set equalizer preset [default|pop|classical|rock]",
+        arg_name = "default|pop|classical|rock"
+    )]
+    equalizer: Option<EqualizerPreset>,
+
+    #[argh(switch, description = "disconnect device")]
     disconnect: bool,
 
-    /// power off device
-    #[argh(switch)]
+    #[argh(switch, description = "power off device")]
     power_off: bool,
 
-    /// re-pair device
-    #[argh(switch)]
+    #[argh(switch, description = "re-pair device")]
     re_pair: bool,
 
-    /// reset device factory defaults
-    #[argh(switch)]
+    #[argh(switch, description = "reset device to factory defaults")]
     reset: bool,
 }
 
@@ -90,9 +95,14 @@ fn main() {
         println!("LDAC mode set to: {}.", mode);
     }
 
-    if let Some(mode) = args.noise_cancellation {
-        client.set_noise_cancellation_mode(mode).unwrap();
+    if let Some(mode) = args.noise_cancel {
+        client.set_noise_mode(mode).unwrap();
         println!("Noise cancellation mode set to: {}.", mode);
+    }
+
+    if let Some(preset) = args.equalizer {
+        client.set_equalizer_preset(preset).unwrap();
+        println!("Equalizer set to: {}.", preset);
     }
 
     if args.disconnect {
@@ -130,6 +140,7 @@ fn print_info(client: EdifierClient) -> Result<(), String> {
     println!("Game mode: {}", client.get_game_mode()?);
     println!("LDAC mode: {}", client.get_ldac_mode()?);
     println!("Noise cancellation mode: {}", client.get_noise_mode()?);
+    println!("Equalizer preset: {}", client.get_equalizer_preset()?);
 
     Ok(())
 }
