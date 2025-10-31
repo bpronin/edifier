@@ -1,8 +1,7 @@
 use crate::device::EdifierClient;
 use argh::FromArgs;
-use std::{env, io, thread};
 use std::io::Write;
-use std::time::Duration;
+use std::{env, io};
 
 mod bluetooth;
 mod device;
@@ -27,7 +26,7 @@ struct Args {
 }
 
 fn main() {
-    print_flush!("Connecting...");
+    print_discardable!("Connecting...");
 
     let client = EdifierClient::new().unwrap_or_else(|e| {
         print_discard!();

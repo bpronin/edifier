@@ -1,5 +1,5 @@
 ﻿#[macro_export]
-macro_rules! print_flush {
+macro_rules! print_discardable {
     ($($arg:tt)*) => {{
         print!($($arg)*);
         $crate::io::stdout().flush().unwrap();

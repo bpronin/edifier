@@ -153,7 +153,9 @@ impl EdifierClient {
     }
 
     pub(crate) fn set_device_name(&self, name: &str) -> Result<(), String> {
-        todo!()
+        self.send(CMD_SET_NAME, name.as_bytes().into())?;
+
+        Ok(())
     }
 
     pub(crate) fn power_off_device(&self) -> Result<(), String> {
@@ -189,7 +191,17 @@ mod test {
         let _guard = SOCKET_GUARD.lock().unwrap();
         let client = EdifierClient::new().unwrap();
 
-        let result = client.get_device_name();
+        let name = client.get_device_name();
+        println!("{:?}", name);
+        assert!(name.is_ok());
+    }
+
+    #[test]
+    fn test_set_device_name() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.set_device_name("SOME DEVICE");
 
         println!("{:?}", result);
         assert!(result.is_ok());
