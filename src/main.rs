@@ -1,58 +1,58 @@
-use clap::{CommandFactory, Parser};
-use std::env;
 use crate::device::EdifierClient;
+use argh::FromArgs;
+use std::env;
 
 mod bluetooth;
 mod device;
+mod message;
 
-#[derive(Parser)]
-#[command(
-    name = "edifier",
-    version = "1.0",
-    about = "Tool to control Edifier devices"
-)]
+#[derive(FromArgs)]
+/// Tool to control Edifier devices
+///
 struct Args {
-    #[arg(short, long, num_args = 0..=1, help = "Set device name. Omit value to print current one")]
-    name: Option<Option<String>>,
+    /// print device current status
+    #[argh(switch, short = 'i')]
+    info: bool,
 
-    #[arg(short, long, help = "Print device MAC address")]
-    mac: bool,
+    /// set device name
+    #[argh(option)]
+    set_name: Option<String>,
 
-    #[arg(short, long, help = "Power off device")]
+    /// power off device
+    #[argh(switch, short = 'p')]
     power_off: bool,
 }
 
-fn main() -> Result<(), String> {
-    if env::args_os().len() <= 1 {
-        Args::command().print_help().unwrap();
-        return Ok(());
-    }
-
+fn main() {
     let mut client = EdifierClient::default();
-    if let Err(e) = client.connect(){
+    if let Err(e) = client.connect() {
         println!("{}", e);
-        return Ok(());
+        return;
     }
 
-    let args = Args::parse();
-    if let Some(name) = args.name {
-        match name {
-            Some(value) => {
-                client.set_device_name(value)?;
-                println!("Device name set")
-            },
-            None => println!("Device name: {}", client.get_device_name()?),
-        }
+    /* no args */
+    if env::args().count() <= 1 {
+        print_info(client);
+        return;
     }
 
-    if args.mac {
-        println!("Mac address: {}", client.get_mac_address()?);
+    let args: Args = argh::from_env();
+    if let Some(name) = args.set_name {
+        client.set_device_name(name.as_str()).unwrap();
+        println!("Device name set to: {}", name);
     }
 
     if args.power_off {
-        client.power_off_device()?;
+        client.power_off_device().unwrap();
         println!("Device power off");
     }
 
-    Ok(())
+    if args.info {
+        print_info(client)
+    }
+}
+
+fn print_info(client: EdifierClient) {
+    println!("Device name: {}", client.get_device_name().unwrap());
+    println!("Mac address: {}", client.get_mac_address().unwrap());
 }

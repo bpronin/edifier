@@ -18,7 +18,7 @@ pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
         let mut wsa_data: WSADATA = zeroed();
         let startup_result = WSAStartup(0x202, &mut wsa_data); /* 0x202 = MAKEWORD(2,2) */
         if startup_result != 0 {
-            return Err(format!("WSAStartup failed: {}.", startup_result));
+            return Err(format!("WSAStartup failed: ERROR ({}).", startup_result));
         }
 
         let socket = WinSock::socket(AF_BTH as i32, SOCK_STREAM, BTHPROTO_RFCOMM as i32)
@@ -38,7 +38,7 @@ pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
             size_of::<SOCKADDR_BTH>() as i32,
         );
         if connect_result == SOCKET_ERROR {
-            return Err("Unable to connect to device.".to_string());
+            return Err(last_error("Unable to connect to device"));
         }
 
         Ok(socket)
@@ -56,13 +56,13 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
     unsafe {
         let bytes_sent = WinSock::send(socket, data, SEND_RECV_FLAGS(0));
         if bytes_sent == SOCKET_ERROR {
-            return Err(format!("Write error: {:?}.", WSAGetLastError()));
+            return Err(last_error("Write error"));
         }
 
         let mut buffer = [0u8; 256];
         let bytes_read = WinSock::recv(socket, &mut buffer, SEND_RECV_FLAGS(0));
         if bytes_read == SOCKET_ERROR {
-            return Err(format!("Read error: {:?}.", WSAGetLastError()));
+            return Err(last_error("Read error"));
         }
 
         let result = buffer[..bytes_read as usize].to_vec();
@@ -152,4 +152,8 @@ fn has_spp_service(
             false
         }
     }
+}
+
+fn last_error(message: &str) -> String {
+    format!("{}: {:?}.", message, unsafe { WSAGetLastError() })
 }
