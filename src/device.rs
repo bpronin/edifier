@@ -1,7 +1,6 @@
 ﻿use crate::message::EdifierMessage;
 use crate::utils::join_str;
 use crate::{bluetooth, utils};
-use std::fmt::{Display, Pointer};
 use strum_macros::{Display, EnumString, FromRepr};
 use utils::join_hex;
 use windows::Win32::Networking::WinSock::SOCKET;
@@ -62,15 +61,6 @@ pub enum LdacMode {
 #[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
-pub enum NoiseMode {
-    Off = 0x01,
-    On = 0x02,
-    Ambient = 0x03,
-}
-
-#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
 pub enum EqualizerPreset {
     Default = 0x00, /* AKA "Classic" */
     Pop = 0x01,
@@ -91,17 +81,52 @@ pub enum EqualizerPreset {
 //     Minus3 = 0x03,
 // }
 
-#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
-#[repr(u16)]
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, FromRepr, EnumString, Display)]
+#[repr(u8)]
+#[strum(ascii_case_insensitive)]
+pub enum NoiseCancellationMode {
+    Off = 0x01,
+    On = 0x02,
+    Ambient = 0x03,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, FromRepr, EnumString, Display)]
+#[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum ButtonControlSet {
-    OnOff = 0x0A01,
-    OffOn = 0x0A03,
-    // OnAmbient = 0x0A02,
-    AmbientOn = 0x0A06,
-    AmbientOff = 0x0A04,
-    OffAmbient = 0x0A05,
-    All = 0x0A07,
+    OnOff = 0x03,
+    OnAmbient = 0x06,
+    OffAmbient = 0x05,
+    All = 0x07,
+}
+
+impl From<&Vec<NoiseCancellationMode>> for ButtonControlSet {
+
+    fn from(set: &Vec<NoiseCancellationMode>) -> Self {
+        use ButtonControlSet::*;
+        use NoiseCancellationMode::*;
+
+        match set {
+            v if v.contains(&On) && v.contains(&Off) && v.contains(&Ambient) => All,
+            v if v.contains(&On) && v.contains(&Off) => OnOff,
+            v if v.contains(&On) && v.contains(&Ambient) => OnAmbient,
+            v if v.contains(&Off) && v.contains(&Ambient) => OffAmbient,
+            _ => panic!("invalid combination"),
+        }
+    }
+}
+
+impl Into<Vec<NoiseCancellationMode>> for ButtonControlSet {
+    fn into(self) -> Vec<NoiseCancellationMode> {
+        use ButtonControlSet::*;
+        use NoiseCancellationMode::*;
+        match self {
+            OnOff => vec![On, Off],
+            OnAmbient => vec![On, Ambient],
+            OffAmbient => vec![Ambient, Off],
+            All => vec![On, Off, Ambient],
+        }
+    }
 }
 
 static SPP_UUID: GUID = GUID::from_u128(0xEDF00000_EDFE_DFED_FEDF_EDFEDFEDFEDF);
@@ -141,8 +166,9 @@ impl EdifierClient {
 
     pub(crate) fn get_battery_level(&self) -> Result<u8, String> {
         let response = self.send(CMD_GET_BATTERY_LEVEL, None)?;
+        let result = response.payload().unwrap()[0];
 
-        Ok(response.payload().unwrap()[0])
+        Ok(result)
     }
 
     pub(crate) fn get_firmware_version(&self) -> Result<String, String> {
@@ -162,9 +188,9 @@ impl EdifierClient {
     pub(crate) fn get_game_mode(&self) -> Result<GameMode, String> {
         let response = self.send(CMD_GET_GAME_MODE, None)?;
         let value = response.payload().unwrap()[0];
-        let mode = GameMode::from_repr(value).unwrap();
+        let result = GameMode::from_repr(value).unwrap();
 
-        Ok(mode)
+        Ok(result)
     }
 
     pub(crate) fn set_game_mode(&self, mode: GameMode) -> Result<(), String> {
@@ -176,9 +202,9 @@ impl EdifierClient {
     pub(crate) fn get_ldac_mode(&self) -> Result<LdacMode, String> {
         let response = self.send(CMD_GET_LDAC_MODE, None)?;
         let value = response.payload().unwrap()[0];
-        let mode = LdacMode::from_repr(value).unwrap();
+        let result = LdacMode::from_repr(value).unwrap();
 
-        Ok(mode)
+        Ok(result)
     }
 
     pub(crate) fn set_ldac_mode(&self, mode: LdacMode) -> Result<(), String> {
@@ -187,15 +213,15 @@ impl EdifierClient {
         Ok(())
     }
 
-    pub(crate) fn get_noise_mode(&self) -> Result<NoiseMode, String> {
+    pub(crate) fn get_noise_mode(&self) -> Result<NoiseCancellationMode, String> {
         let response = self.send(CMD_GET_NOISE_MODE, None)?;
         let value = response.payload().unwrap()[0];
-        let mode = NoiseMode::from_repr(value).unwrap();
+        let result = NoiseCancellationMode::from_repr(value).unwrap();
 
-        Ok(mode)
+        Ok(result)
     }
 
-    pub(crate) fn set_noise_mode(&self, mode: NoiseMode) -> Result<(), String> {
+    pub(crate) fn set_noise_mode(&self, mode: NoiseCancellationMode) -> Result<(), String> {
         self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8]))?;
 
         Ok(())
@@ -215,32 +241,31 @@ impl EdifierClient {
     pub(crate) fn get_equalizer_preset(&self) -> Result<EqualizerPreset, String> {
         let response = self.send(CMD_GET_EQUALIZER_PRESET, None)?;
         let value = response.payload().unwrap()[0];
-        let mode = EqualizerPreset::from_repr(value).unwrap();
+        let result = EqualizerPreset::from_repr(value).unwrap();
 
-        Ok(mode)
+        Ok(result)
     }
 
-    pub(crate) fn set_equalizer_preset(&self, mode: EqualizerPreset) -> Result<(), String> {
-        self.send(CMD_SET_EQUALIZER_PRESET, Some(&[mode as u8]))?;
+    pub(crate) fn set_equalizer_preset(&self, preset: EqualizerPreset) -> Result<(), String> {
+        self.send(CMD_SET_EQUALIZER_PRESET, Some(&[preset as u8]))?;
 
         Ok(())
     }
 
-    pub(crate) fn get_button_control_set(&self) -> Result<ButtonControlSet, String> {
+    pub(crate) fn get_button_control_set(&self) -> Result<Vec<NoiseCancellationMode>, String> {
         let response = self.send(CMD_GET_BUTTON_CONTROL_SET, Some(&[0x0A]))?;
-        let payload = response.payload().unwrap();
-        // let value = option.unwrap()[1];
-        let value = u16::from_be_bytes([payload[0], payload[1]]);
-        // let mode = ButtonControlSet::from_repr(value).unwrap();
-        let mode = ButtonControlSet::from_repr(value)
-            // .expect(format!("Unknown button control set: {:04b}", value).as_str());
-            .expect(format!("Unknown button control set: {:#06X}", value).as_str());
+        let value = response.payload().unwrap()[1];
+        let result = ButtonControlSet::from_repr(value).unwrap();
 
-        Ok(mode)
+        Ok(result.into())
     }
 
-    pub(crate) fn set_button_control_set(&self, mode: ButtonControlSet) -> Result<(), String> {
-        self.send(CMD_SET_BUTTON_CONTROL_SET, Some(&[mode as u8]))?;
+    pub(crate) fn set_button_control_set(
+        &self,
+        set: &Vec<NoiseCancellationMode>,
+    ) -> Result<(), String> {
+        let value = ButtonControlSet::from(set);
+        self.send(CMD_SET_BUTTON_CONTROL_SET, Some(&[0x0A, value as u8]))?;
 
         Ok(())
     }
@@ -283,17 +308,13 @@ impl EdifierClient {
 
     fn send(&self, command_code: u8, payload: Option<&[u8]>) -> Result<EdifierMessage, String> {
         let request = EdifierMessage::new(command_code, payload);
-
-        // println!("Q: {}", &request);
-
         let response: EdifierMessage = bluetooth::send(self.socket, request.as_slice())?.into();
-
-        // println!("R: {}", &response);
 
         if response.command_code() != request.command_code() {
             return Err(format!(
                 "Response command [{:#04X}] does not match request command [{:#04X}]",
-                response.command_code().unwrap(), request.command_code().unwrap()
+                response.command_code().unwrap(),
+                request.command_code().unwrap()
             ));
         }
 
@@ -309,7 +330,8 @@ impl Drop for EdifierClient {
 
 #[cfg(test)]
 mod test {
-    use crate::device::{ButtonControlSet, EdifierClient};
+    use crate::device::NoiseCancellationMode::{Ambient, Off, On};
+    use crate::device::{ButtonControlSet, EdifierClient, NoiseCancellationMode};
     use std::sync::{LazyLock, Mutex};
 
     /// Prevents of using same socket in test simultaneously
@@ -381,14 +403,25 @@ mod test {
     }
 
     #[test]
+    fn test_get_noise_mode() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.get_noise_mode();
+
+        assert!(result.is_ok());
+        println!("{}", result.unwrap());
+    }
+
+    #[test]
     fn test_get_button_control_set() {
         let _guard = SOCKET_GUARD.lock().unwrap();
         let client = EdifierClient::new().unwrap();
 
         let result = client.get_button_control_set();
 
-        println!("{:?}", result);
         assert!(result.is_ok());
+        println!("{:?}", result.unwrap());
     }
 
     #[test]
@@ -396,10 +429,39 @@ mod test {
         let _guard = SOCKET_GUARD.lock().unwrap();
         let client = EdifierClient::new().unwrap();
 
-        let result = client.set_button_control_set(ButtonControlSet::OnOff);
+        let result = client.set_button_control_set(&vec![On, Off, Ambient]);
         assert!(result.is_ok());
-        // println!("{}", result.unwrap());
 
-        // println!("{:?}", client.get_button_control_set());
+        println!("{:?}", client.get_button_control_set().unwrap());
+    }
+
+    #[test]
+    fn test_button_control_set_from_noise_mode() {
+        use ButtonControlSet::*;
+        use NoiseCancellationMode::*;
+
+        assert_eq!(OnOff, ButtonControlSet::from(&vec![On, Off]));
+        assert_eq!(OnOff, ButtonControlSet::from(&vec![Off, On]));
+        assert_eq!(OnAmbient, ButtonControlSet::from(&vec![On, Ambient]));
+        assert_eq!(OffAmbient, ButtonControlSet::from(&vec![Ambient, Off]));
+        assert_eq!(All, ButtonControlSet::from(&vec![On, Off, Ambient]));
+    }
+
+    #[test]
+    fn test_button_control_set_into_noise_mode() {
+        use ButtonControlSet::*;
+        use NoiseCancellationMode::*;
+
+        let mut v: Vec<NoiseCancellationMode> = OnOff.into();
+        assert_eq!(vec![On, Off], v);
+
+        v = OnAmbient.into();
+        assert_eq!(vec![On, Ambient], v);
+
+        v = OffAmbient.into();
+        assert_eq!(vec![Ambient, Off], v);
+
+        v = All.into();
+        assert_eq!(vec![On, Off, Ambient], v);
     }
 }

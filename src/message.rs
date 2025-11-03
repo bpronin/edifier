@@ -1,4 +1,4 @@
-﻿use crate::utils::join_hex;
+﻿use crate::utils::{join_hex, split_into_bytes};
 use std::fmt::{Display, Formatter, Write};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -86,10 +86,6 @@ impl Display for EdifierMessage {
 
 fn compute_crc(data: &[u8]) -> u16 {
     0x2019 + data.iter().map(|&b| b as u16).sum::<u16>()
-}
-
-fn split_into_bytes(value: u16) -> [u8; 2] {
-    [(value >> 8) as u8, (value & 0xFF) as u8]
 }
 
 #[cfg(test)]

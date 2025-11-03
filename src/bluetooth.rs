@@ -1,4 +1,5 @@
-﻿use std::mem::zeroed;
+﻿use crate::utils::join_hex;
+use std::mem::zeroed;
 use windows::Win32::Devices::Bluetooth::{
     BluetoothEnumerateInstalledServices, BluetoothFindDeviceClose, BluetoothFindFirstDevice, BluetoothFindFirstRadio,
     BluetoothFindNextDevice, BluetoothFindNextRadio, BluetoothFindRadioClose,
@@ -7,7 +8,10 @@ use windows::Win32::Devices::Bluetooth::{
 };
 use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE};
 use windows::Win32::Networking::WinSock;
-use windows::Win32::Networking::WinSock::{WSACleanup, WSAGetLastError, WSAStartup, INVALID_SOCKET, SEND_RECV_FLAGS, SOCKADDR, SOCKET, SOCKET_ERROR, SOCK_STREAM, WSADATA, WSAETIMEDOUT, WSA_ERROR};
+use windows::Win32::Networking::WinSock::{
+    WSACleanup, WSAGetLastError, WSAStartup, INVALID_SOCKET, SEND_RECV_FLAGS, SOCKADDR, SOCKET,
+    SOCKET_ERROR, SOCK_STREAM, WSADATA, WSAETIMEDOUT, WSA_ERROR,
+};
 use windows_core::GUID;
 
 pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
@@ -40,7 +44,7 @@ pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
                 Err("Unable to connect to device.".to_string())
             } else {
                 Err(wsa_error_message("Failed to connect to device", error))
-            }
+            };
         }
 
         Ok(socket)
@@ -55,7 +59,9 @@ pub(crate) fn disconnect(sock: SOCKET) {
 }
 
 pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
-    unsafe {
+    // println!("Q: [{}]", join_hex(&data, ", "));
+
+    let result = unsafe {
         let bytes_sent = WinSock::send(socket, data, SEND_RECV_FLAGS(0));
         if bytes_sent == SOCKET_ERROR {
             return Err(wsa_error_message("Write error", WSAGetLastError()));
@@ -67,10 +73,12 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
             return Err(wsa_error_message("Read error", WSAGetLastError()));
         }
 
-        let result = buffer[..bytes_read as usize].to_vec();
+        buffer[..bytes_read as usize].to_vec()
+    };
 
-        Ok(result)
-    }
+    // println!("R: [{}]", join_hex(&result, ", "));
+
+    Ok(result)
 }
 
 ///
@@ -156,6 +164,6 @@ fn has_spp_service(
     }
 }
 
-fn wsa_error_message(message: &str, error:WSA_ERROR) -> String {
+fn wsa_error_message(message: &str, error: WSA_ERROR) -> String {
     format!("{}: {:?}.", message, error)
 }

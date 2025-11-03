@@ -86,7 +86,7 @@ https://github.com/wh201906/mEDIFIER/blob/main/doc/KnownCommands/W820NB_Double_G
 ### Get button control set
     send: AA 02 F0 0A 21 BF  
     read: BB 03 F0 0A xx yy yy
-
+                
 ### Set 'Noise cancellation / Noise cancellation off / Ambient sound' (All)
     send: AA 03 F1 0A 07 21 C8  
     read: BB 03 F1 0A 07 21 D9
