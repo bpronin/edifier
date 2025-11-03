@@ -31,6 +31,9 @@ impl EdifierMessage {
     }
 
     pub(crate) fn payload(&self) -> Option<Vec<u8>> {
+        if self.bytes.is_empty() {
+            return None;
+        }
         let pl_bytes = self.bytes[3..self.bytes.len() - 2].to_vec();
         if pl_bytes.is_empty() {
             None
@@ -47,8 +50,11 @@ impl EdifierMessage {
         self.bytes[1]
     }
 
-    pub(crate) fn command_code(&self) -> u8 {
-        self.bytes[2]
+    pub(crate) fn command_code(&self) -> Option<u8> {
+        if self.bytes.is_empty() {
+            return None;
+        }
+        Some(self.bytes[2])
     }
 
     pub(crate) fn crc(&self) -> u16 {

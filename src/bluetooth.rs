@@ -7,10 +7,7 @@ use windows::Win32::Devices::Bluetooth::{
 };
 use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE};
 use windows::Win32::Networking::WinSock;
-use windows::Win32::Networking::WinSock::{
-    WSACleanup, WSAGetLastError, WSAStartup, INVALID_SOCKET, SEND_RECV_FLAGS, SOCKADDR, SOCKET,
-    SOCKET_ERROR, SOCK_STREAM, WSADATA,
-};
+use windows::Win32::Networking::WinSock::{WSACleanup, WSAGetLastError, WSAStartup, INVALID_SOCKET, SEND_RECV_FLAGS, SOCKADDR, SOCKET, SOCKET_ERROR, SOCK_STREAM, WSADATA, WSAETIMEDOUT, WSA_ERROR};
 use windows_core::GUID;
 
 pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
@@ -38,7 +35,12 @@ pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
             size_of::<SOCKADDR_BTH>() as i32,
         );
         if connect_result == SOCKET_ERROR {
-            return Err(last_error("Unable to connect to device"));
+            let error = WSAGetLastError();
+            return if error == WSAETIMEDOUT {
+                Err("Unable to connect to device.".to_string())
+            } else {
+                Err(wsa_error_message("Failed to connect to device", error))
+            }
         }
 
         Ok(socket)
@@ -56,13 +58,13 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
     unsafe {
         let bytes_sent = WinSock::send(socket, data, SEND_RECV_FLAGS(0));
         if bytes_sent == SOCKET_ERROR {
-            return Err(last_error("Write error"));
+            return Err(wsa_error_message("Write error", WSAGetLastError()));
         }
 
         let mut buffer = [0u8; 256];
         let bytes_read = WinSock::recv(socket, &mut buffer, SEND_RECV_FLAGS(0));
         if bytes_read == SOCKET_ERROR {
-            return Err(last_error("Read error"));
+            return Err(wsa_error_message("Read error", WSAGetLastError()));
         }
 
         let result = buffer[..bytes_read as usize].to_vec();
@@ -154,6 +156,6 @@ fn has_spp_service(
     }
 }
 
-fn last_error(message: &str) -> String {
-    format!("{}: {:?}.", message, unsafe { WSAGetLastError() })
+fn wsa_error_message(message: &str, error:WSA_ERROR) -> String {
+    format!("{}: {:?}.", message, error)
 }

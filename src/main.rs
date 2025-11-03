@@ -1,6 +1,7 @@
-use crate::device::{ButtonControlSet, EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseMode};
+use crate::device::{EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseMode};
 use argh::FromArgs;
 use std::env;
+use std::io::stdin;
 use std::str::FromStr;
 
 mod bluetooth;
@@ -70,6 +71,9 @@ struct Args {
 
     #[argh(switch, description = "reset device to factory defaults")]
     reset: bool,
+
+    #[argh(switch, short = 'y', description = "disable confirmation for unsafe operations")]
+    no_confirm: bool,
 }
 
 fn main() {
@@ -107,8 +111,10 @@ fn main() {
     }
 
     if let Some(mode) = args.ldac {
-        client.set_ldac_mode(mode).unwrap();
-        println!("LDAC mode set to: {}.", mode);
+        if args.no_confirm || confirm_disconnect() {
+            client.set_ldac_mode(mode).unwrap();
+            println!("LDAC mode set to: {}.", mode);
+        }
     }
 
     if let Some(mode) = args.noise_cancel {
@@ -128,28 +134,43 @@ fn main() {
     // }
 
     if args.disconnect {
-        client.disconnect_bluetooth().unwrap();
-        println!("Device disconnected.");
+        if args.no_confirm || confirm_disconnect() {
+            client.disconnect_bluetooth().unwrap();
+            println!("Device disconnected.");
+        }
     }
 
     if args.re_pair {
-        client.re_pair().unwrap();
-        println!("Re-pairing device.");
+        if args.no_confirm || confirm_disconnect() {
+            client.re_pair().unwrap();
+            println!("Re-pairing device.");
+        }
     }
 
     if args.power_off {
-        client.power_off().unwrap();
-        println!("Device powered off.");
+        if args.no_confirm || confirm_disconnect() {
+            client.power_off().unwrap();
+            println!("Device powered off.");
+        }
     }
 
     if args.reset {
-        client.reset_factory_defaults().unwrap();
-        println!("Device settings reset to factory defaults.");
+        if args.no_confirm || confirm_disconnect() {
+            client.reset_factory_defaults().unwrap();
+            println!("Device settings reset to factory defaults.");
+        }
     }
 
     if args.info {
         print_info(client).unwrap()
     }
+}
+
+fn confirm_disconnect() -> bool {
+    println!("The device will be disconnected. Continue? (y/n)");
+    let mut buffer = String::new();
+    stdin().read_line(&mut buffer).unwrap();
+    buffer.to_ascii_lowercase().trim() == "y"
 }
 
 fn print_info(client: EdifierClient) -> Result<(), String> {

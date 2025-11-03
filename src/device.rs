@@ -293,7 +293,7 @@ impl EdifierClient {
         if response.command_code() != request.command_code() {
             return Err(format!(
                 "Response command [{:#04X}] does not match request command [{:#04X}]",
-                response.command_code(), request.command_code()
+                response.command_code().unwrap(), request.command_code().unwrap()
             ));
         }
 
