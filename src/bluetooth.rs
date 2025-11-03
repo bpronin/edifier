@@ -1,5 +1,4 @@
-﻿use crate::utils::join_hex;
-use std::mem::zeroed;
+﻿use std::mem::zeroed;
 use windows::Win32::Devices::Bluetooth::{
     BluetoothEnumerateInstalledServices, BluetoothFindDeviceClose, BluetoothFindFirstDevice, BluetoothFindFirstRadio,
     BluetoothFindNextDevice, BluetoothFindNextRadio, BluetoothFindRadioClose,

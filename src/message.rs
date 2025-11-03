@@ -42,19 +42,19 @@ impl EdifierMessage {
         }
     }
 
-    pub(crate) fn signature(&self) -> u8 {
-        self.bytes[0]
-    }
-
-    pub(crate) fn data_size(&self) -> u8 {
-        self.bytes[1]
-    }
-
     pub(crate) fn command_code(&self) -> Option<u8> {
         if self.bytes.is_empty() {
             return None;
         }
         Some(self.bytes[2])
+    }
+
+/*    pub(crate) fn signature(&self) -> u8 {
+        self.bytes[0]
+    }
+
+    pub(crate) fn data_size(&self) -> u8 {
+        self.bytes[1]
     }
 
     pub(crate) fn crc(&self) -> u16 {
@@ -63,7 +63,7 @@ impl EdifierMessage {
             self.bytes[self.bytes.len() - 1],
         ])
     }
-
+*/
     pub fn as_slice(&self) -> &[u8] {
         self.bytes.as_slice()
     }
