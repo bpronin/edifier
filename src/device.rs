@@ -101,7 +101,6 @@ pub enum ButtonControlSet {
 }
 
 impl From<&Vec<NoiseCancellationMode>> for ButtonControlSet {
-
     fn from(set: &Vec<NoiseCancellationMode>) -> Self {
         use ButtonControlSet::*;
         use NoiseCancellationMode::*;
@@ -312,8 +311,8 @@ impl EdifierClient {
 
         if response.command_code() != request.command_code() {
             return Err(format!(
-                "Response command [{:#04X}] does not match request command [{:#04X}]",
-                response.command_code().unwrap(),
+                "Response [{}] does not match request command [{:#04X}]",
+                response,
                 request.command_code().unwrap()
             ));
         }
