@@ -309,13 +309,14 @@ impl EdifierClient {
         let request = EdifierMessage::new(command_code, payload);
         let response: EdifierMessage = bluetooth::send(self.socket, request.as_slice())?.into();
 
-        if response.command_code() != request.command_code() {
+        /*if response.command_code() != request.command_code() {
+            //todo: is [BB, 02, C3, 0D, 21, A6] an error?
             return Err(format!(
-                "Response [{}] does not match request command [{:#04X}]",
+                "Response {} does not match request command [{:#04X}]",
                 response,
                 request.command_code().unwrap()
             ));
-        }
+        }*/
 
         Ok(response)
     }
