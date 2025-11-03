@@ -1,9 +1,9 @@
 use crate::device::{EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseCancellationMode};
+use crate::utils::join_str;
 use argh::FromArgs;
 use std::env;
 use std::io::stdin;
 use std::str::FromStr;
-use crate::utils::join_str;
 
 mod bluetooth;
 mod device;
@@ -46,13 +46,19 @@ struct Args {
     )]
     equalizer: Option<EqualizerPreset>,
 
+    // #[argh(
+    //     option,
+    //     from_str_fn(parse_button_arg),
+    //     description = "set device button noise cancellation control set [[on]|[off]|[ambient]]",
+    //     arg_name = "[on]|[off]|[ambient]"
+    // )]
+    // button: Option<Vec<NoiseCancellationMode>>,
     #[argh(
         option,
-        from_str_fn(parse_button_arg),
         description = "set device button noise cancellation control set [[on]|[off]|[ambient]]",
         arg_name = "[on]|[off]|[ambient]"
     )]
-    button: Option<Vec<NoiseCancellationMode>>,
+    button: Option<String>,
 
     #[argh(switch, description = "disconnect device")]
     disconnect: bool,
@@ -66,7 +72,11 @@ struct Args {
     #[argh(switch, description = "reset device to factory defaults")]
     reset: bool,
 
-    #[argh(switch, short = 'y', description = "disable confirmation for unsafe operations")]
+    #[argh(
+        switch,
+        short = 'y',
+        description = "disable confirmation for unsafe operations"
+    )]
     no_confirm: bool,
 }
 
@@ -89,41 +99,52 @@ fn main() {
 
     let args: Args = argh::from_env();
 
-    if let Some(name) = args.name {
-        client.set_device_name(name.as_str()).unwrap();
-        println!("Device name set to: {}.", name);
+    if let Some(option) = args.name {
+        client.set_device_name(option.as_str()).unwrap();
+        println!("Device name set to: {}.", option);
     }
 
-    if let Some(volume) = args.prompt_volume {
-        client.set_prompt_volume(volume).unwrap();
-        println!("Prompt volume set to: {}.", volume);
+    if let Some(option) = args.prompt_volume {
+        client.set_prompt_volume(option).unwrap();
+        println!("Prompt volume set to: {}.", option);
     }
 
-    if let Some(mode) = args.game {
-        client.set_game_mode(mode).unwrap();
-        println!("Game mode set to: {}.", mode);
+    if let Some(option) = args.game {
+        client.set_game_mode(option).unwrap();
+        println!("Game mode set to: {}.", option);
     }
 
-    if let Some(mode) = args.ldac {
+    if let Some(option) = args.ldac {
         if args.no_confirm || confirm_disconnect() {
-            client.set_ldac_mode(mode).unwrap();
-            println!("LDAC mode set to: {}.", mode);
+            client.set_ldac_mode(option).unwrap();
+            println!("LDAC mode set to: {}.", option);
         }
     }
 
-    if let Some(mode) = args.noise_cancel {
-        client.set_noise_mode(mode).unwrap();
-        println!("Noise cancellation mode set to: {}.", mode);
+    if let Some(option) = args.noise_cancel {
+        client.set_noise_mode(option).unwrap();
+        println!("Noise cancellation mode set to: {}.", option);
     }
 
-    if let Some(preset) = args.equalizer {
-        client.set_equalizer_preset(preset).unwrap();
-        println!("Equalizer set to: {}.", preset);
+    if let Some(option) = args.equalizer {
+        client.set_equalizer_preset(option).unwrap();
+        println!("Equalizer set to: {}.", option);
     }
 
-    if let Some(set) = args.button {
-        client.set_button_control_set(&set).unwrap();
-        println!("Button control set to: [{}].", join_str(set, ", "));
+    if let Some(option) = args.button {
+        match option
+            .split('-')
+            .map(|s| NoiseCancellationMode::from_str(s))
+            .collect()
+        {
+            Ok(set) => {
+                client.set_button_control_set(&set).unwrap();
+                println!("Button control set to: [{}].", join_str(set, ", "));
+            }
+            Err(_) => {
+                println!("Invalid control set: '{option}'");
+            }
+        }
     }
 
     if args.disconnect {
@@ -178,14 +199,10 @@ fn print_info(client: EdifierClient) -> Result<(), String> {
     println!("Noise cancellation mode: {}", client.get_noise_mode()?);
     // println!("Ambient volume: {}", client.get_ambient_volume()?);
     println!("Equalizer preset: {}", client.get_equalizer_preset()?);
-    println!("Button actions: [{}]", join_str(client.get_button_control_set()?, ", "));
+    println!(
+        "Button actions: [{}]",
+        join_str(client.get_button_control_set()?, ", ")
+    );
 
     Ok(())
-}
-
-fn parse_button_arg(value: &str) -> Result<Vec<NoiseCancellationMode>, String> {
-    Ok(value
-        .split('-')
-        .map(|s| NoiseCancellationMode::from_str(s).unwrap())
-        .collect())
 }

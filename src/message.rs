@@ -42,28 +42,29 @@ impl EdifierMessage {
         }
     }
 
-    pub(crate) fn command_code(&self) -> Option<u8> {
-        if self.bytes.is_empty() {
-            return None;
+    /*
+        pub(crate) fn command_code(&self) -> Option<u8> {
+            if self.bytes.is_empty() {
+                return None;
+            }
+            Some(self.bytes[2])
         }
-        Some(self.bytes[2])
-    }
 
-/*    pub(crate) fn signature(&self) -> u8 {
-        self.bytes[0]
-    }
+        pub(crate) fn signature(&self) -> u8 {
+            self.bytes[0]
+        }
 
-    pub(crate) fn data_size(&self) -> u8 {
-        self.bytes[1]
-    }
+        pub(crate) fn data_size(&self) -> u8 {
+            self.bytes[1]
+        }
 
-    pub(crate) fn crc(&self) -> u16 {
-        u16::from_be_bytes([
-            self.bytes[self.bytes.len() - 2],
-            self.bytes[self.bytes.len() - 1],
-        ])
-    }
-*/
+        pub(crate) fn crc(&self) -> u16 {
+            u16::from_be_bytes([
+                self.bytes[self.bytes.len() - 2],
+                self.bytes[self.bytes.len() - 1],
+            ])
+        }
+    */
     pub fn as_slice(&self) -> &[u8] {
         self.bytes.as_slice()
     }
