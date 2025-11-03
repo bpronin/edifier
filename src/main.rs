@@ -139,7 +139,7 @@ fn main() {
         {
             Ok(set) => {
                 client.set_button_control_set(&set).unwrap();
-                println!("Button control set to: [{}].", join_str(set, ", "));
+                println!("Button actions set to: [{}].", join_str(set, ", "));
             }
             Err(_) => {
                 println!("Invalid control set: '{option}'");
