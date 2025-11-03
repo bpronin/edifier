@@ -1,6 +1,9 @@
-﻿use crate::message::EdifierMessage;
+﻿use crate::device::LdacMode::{Off, K48, K96};
+use crate::message::EdifierMessage;
 use crate::utils::join_str;
 use crate::{bluetooth, utils};
+use std::fmt::Display;
+use std::str::FromStr;
 use strum_macros::{Display, EnumString, FromRepr};
 use utils::join_hex;
 use windows::Win32::Networking::WinSock::SOCKET;
@@ -49,13 +52,36 @@ pub enum GameMode {
     On = 0x01,
 }
 
-#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
+#[derive(Debug, Copy, Clone, FromRepr)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum LdacMode {
     Off = 0x00,
     K48 = 0x01,
     K96 = 0x02,
+}
+
+impl FromStr for LdacMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_uppercase().as_str() {
+            "OFF" => Ok(Off),
+            "48K" => Ok(K48),
+            "96K" => Ok(K96),
+            _ => Err("Illegal LDAC mode")?,
+        }
+    }
+}
+
+impl Display for LdacMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Off => f.write_str("Off"),
+            K48 => f.write_str("48K"),
+            K96 => f.write_str("96K"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
