@@ -27,7 +27,7 @@ https://github.com/wh201906/mEDIFIER/blob/main/doc/KnownCommands/W820NB_Double_G
     send: AA 01 D0 21 94  
     read: BB 02 D0 xx yy yy
 
-### Get Playback Status?
+### Get playback Status?
     send: AA 01 C3 21 87  
     read: BB 02 C3 03 21 9C
 

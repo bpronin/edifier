@@ -1,4 +1,7 @@
-﻿#[derive(Debug, PartialEq, Eq)]
+﻿use crate::utils::join_hex;
+use std::fmt::{Display, Formatter, Write};
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct EdifierMessage {
     bytes: Vec<u8>,
 }
@@ -36,26 +39,25 @@ impl EdifierMessage {
         }
     }
 
-/*
     pub(crate) fn signature(&self) -> u8 {
         self.bytes[0]
     }
-    
+
     pub(crate) fn data_size(&self) -> u8 {
         self.bytes[1]
     }
-    
+
     pub(crate) fn command_code(&self) -> u8 {
         self.bytes[2]
     }
-    
+
     pub(crate) fn crc(&self) -> u16 {
         u16::from_be_bytes([
             self.bytes[self.bytes.len() - 2],
             self.bytes[self.bytes.len() - 1],
         ])
     }
-*/
+
     pub fn as_slice(&self) -> &[u8] {
         self.bytes.as_slice()
     }
@@ -64,6 +66,15 @@ impl EdifierMessage {
 impl From<Vec<u8>> for EdifierMessage {
     fn from(bytes: Vec<u8>) -> Self {
         Self { bytes }
+    }
+}
+
+impl Display for EdifierMessage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let string = join_hex(&self.bytes, ", ");
+        f.write_char('[')?;
+        f.write_str(string.as_str())?;
+        f.write_char(']')
     }
 }
 

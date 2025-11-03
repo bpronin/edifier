@@ -1,7 +1,9 @@
-﻿use crate::bluetooth;
-use crate::message::EdifierMessage;
+﻿use crate::message::EdifierMessage;
+use crate::utils::join_str;
+use crate::{bluetooth, utils};
 use std::fmt::{Display, Pointer};
 use strum_macros::{Display, EnumString, FromRepr};
+use utils::join_hex;
 use windows::Win32::Networking::WinSock::SOCKET;
 use windows_core::GUID;
 
@@ -13,7 +15,7 @@ const CMD_SET_GAME_MODE: u8 = 0x09;
 const CMD_GET_LDAC_MODE: u8 = 0x48;
 const CMD_SET_LDAC_MODE: u8 = 0x49;
 const CMD_SET_NOISE_MODE: u8 = 0xC1;
-const CMD_GET_PLAYBACK_STATUS: u8 = 0xC3;
+// const CMD_GET_PLAYBACK_STATUS: u8 = 0xC3;
 const CMD_SET_EQUALIZER_PRESET: u8 = 0xC4;
 const CMD_GET_FIRMWARE_VERSION: u8 = 0xC6;
 const CMD_GET_MAC_ADDRESS: u8 = 0xC8;
@@ -32,7 +34,7 @@ const CMD_GET_FINGERPRINT: u8 = 0xD8;
 const CMD_GET_BUTTON_CONTROL_SET: u8 = 0xF0;
 const CMD_SET_BUTTON_CONTROL_SET: u8 = 0xF1;
 
-#[derive(Copy, Clone, FromRepr, EnumString, Display)]
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum PlaybackStatus {
@@ -40,7 +42,7 @@ pub enum PlaybackStatus {
     Playing = 0x0D,
 }
 
-#[derive(Copy, Clone, FromRepr, EnumString, Display)]
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum GameMode {
@@ -48,7 +50,7 @@ pub enum GameMode {
     On = 0x01,
 }
 
-#[derive(Copy, Clone, FromRepr, EnumString, Display)]
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum LdacMode {
@@ -57,7 +59,7 @@ pub enum LdacMode {
     K96 = 0x02,
 }
 
-#[derive(Copy, Clone, FromRepr, EnumString, Display)]
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum NoiseMode {
@@ -66,7 +68,7 @@ pub enum NoiseMode {
     Ambient = 0x03,
 }
 
-#[derive(Copy, Clone, FromRepr, EnumString, Display)]
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum EqualizerPreset {
@@ -76,30 +78,30 @@ pub enum EqualizerPreset {
     Rock = 0x03,
 }
 
-#[derive(Copy, Clone, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum AmbientVolume {
-    Plus3 = 0x09,
-    Plus2 = 0x08,
-    Plus1 = 0x07,
-    Default = 0x06,
-    Minus1 = 0x05,
-    Minus2 = 0x04,
-    Minus3 = 0x03,
-}
+// #[derive(Copy, Clone, FromRepr, EnumString, Display)]
+// #[repr(u8)]
+// #[strum(ascii_case_insensitive)]
+// pub enum AmbientVolume {
+//     Plus3 = 0x09,
+//     Plus2 = 0x08,
+//     Plus1 = 0x07,
+//     Default = 0x06,
+//     Minus1 = 0x05,
+//     Minus2 = 0x04,
+//     Minus3 = 0x03,
+// }
 
-#[derive(Copy, Clone, FromRepr, EnumString, Display)]
-#[repr(u8)]
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
+#[repr(u16)]
 #[strum(ascii_case_insensitive)]
-pub enum KeyControlSet {
-    All = 0x07,
-    AmbientAndCancellation = 0x06,
-    OffAndAmbient = 0x05,
-    OffAndCancellation = 0x03,
-    AmbientAndOff = 0x04,
-    CancellationAndAmbient = 0x02,
-    CancellationAndOff = 0x01,
+pub enum ButtonControlSet {
+    OnOff = 0x0A01,
+    OffOn = 0x0A03,
+    // OnAmbient = 0x0A02,
+    AmbientOn = 0x0A06,
+    AmbientOff = 0x0A04,
+    OffAmbient = 0x0A05,
+    All = 0x0A07,
 }
 
 static SPP_UUID: GUID = GUID::from_u128(0xEDF00000_EDFE_DFED_FEDF_EDFEDFEDFEDF);
@@ -132,12 +134,7 @@ impl EdifierClient {
 
     pub(crate) fn get_mac_address(&self) -> Result<String, String> {
         let response = self.send(CMD_GET_MAC_ADDRESS, None)?;
-        let payload = response.payload().unwrap();
-        let result = payload
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<String>>()
-            .join(":");
+        let result = join_hex(response.payload().unwrap(), ":");
 
         Ok(result)
     }
@@ -150,24 +147,14 @@ impl EdifierClient {
 
     pub(crate) fn get_firmware_version(&self) -> Result<String, String> {
         let response = self.send(CMD_GET_FIRMWARE_VERSION, None)?;
-        let payload = response.payload().unwrap();
-        let result = payload
-            .iter()
-            .map(|b| b.to_string())
-            .collect::<Vec<String>>()
-            .join(".");
+        let result = join_str(response.payload().unwrap(), ".");
 
         Ok(result)
     }
 
     pub(crate) fn get_fingerprint(&self) -> Result<String, String> {
         let response = self.send(CMD_GET_FINGERPRINT, None)?;
-        let payload = response.payload().unwrap();
-        let result = payload
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<String>>()
-            .join(" ");
+        let result = join_hex(response.payload().unwrap(), " ");
 
         Ok(result)
     }
@@ -214,7 +201,18 @@ impl EdifierClient {
         Ok(())
     }
 
-   pub(crate) fn get_equalizer_preset(&self) -> Result<EqualizerPreset, String> {
+    // pub(crate) fn get_ambient_volume(&self) -> Result<u8, String> {
+    //     let response = self.send(CMD_GET_NOISE_MODE, None)?;
+    //     Ok(response.payload().unwrap()[1] - 2)
+    // }
+
+    // pub(crate) fn set_ambient_volume(&self, mode: NoiseMode) -> Result<(), String> {
+    //     self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8]))?;
+    //
+    //     Ok(())
+    // }
+
+    pub(crate) fn get_equalizer_preset(&self) -> Result<EqualizerPreset, String> {
         let response = self.send(CMD_GET_EQUALIZER_PRESET, None)?;
         let value = response.payload().unwrap()[0];
         let mode = EqualizerPreset::from_repr(value).unwrap();
@@ -224,6 +222,25 @@ impl EdifierClient {
 
     pub(crate) fn set_equalizer_preset(&self, mode: EqualizerPreset) -> Result<(), String> {
         self.send(CMD_SET_EQUALIZER_PRESET, Some(&[mode as u8]))?;
+
+        Ok(())
+    }
+
+    pub(crate) fn get_button_control_set(&self) -> Result<ButtonControlSet, String> {
+        let response = self.send(CMD_GET_BUTTON_CONTROL_SET, Some(&[0x0A]))?;
+        let payload = response.payload().unwrap();
+        // let value = option.unwrap()[1];
+        let value = u16::from_be_bytes([payload[0], payload[1]]);
+        // let mode = ButtonControlSet::from_repr(value).unwrap();
+        let mode = ButtonControlSet::from_repr(value)
+            // .expect(format!("Unknown button control set: {:04b}", value).as_str());
+            .expect(format!("Unknown button control set: {:#06X}", value).as_str());
+
+        Ok(mode)
+    }
+
+    pub(crate) fn set_button_control_set(&self, mode: ButtonControlSet) -> Result<(), String> {
+        self.send(CMD_SET_BUTTON_CONTROL_SET, Some(&[mode as u8]))?;
 
         Ok(())
     }
@@ -266,9 +283,21 @@ impl EdifierClient {
 
     fn send(&self, command_code: u8, payload: Option<&[u8]>) -> Result<EdifierMessage, String> {
         let request = EdifierMessage::new(command_code, payload);
-        let response = bluetooth::send(self.socket, request.as_slice())?;
 
-        Ok(response.into())
+        // println!("Q: {}", &request);
+
+        let response: EdifierMessage = bluetooth::send(self.socket, request.as_slice())?.into();
+
+        // println!("R: {}", &response);
+
+        if response.command_code() != request.command_code() {
+            return Err(format!(
+                "Response command [{:#04X}] does not match request command [{:#04X}]",
+                response.command_code(), request.command_code()
+            ));
+        }
+
+        Ok(response)
     }
 }
 
@@ -280,7 +309,7 @@ impl Drop for EdifierClient {
 
 #[cfg(test)]
 mod test {
-    use crate::device::EdifierClient;
+    use crate::device::{ButtonControlSet, EdifierClient};
     use std::sync::{LazyLock, Mutex};
 
     /// Prevents of using same socket in test simultaneously
@@ -349,5 +378,28 @@ mod test {
 
         println!("{:?}", result);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_button_control_set() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.get_button_control_set();
+
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_button_control_set() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.set_button_control_set(ButtonControlSet::OnOff);
+        assert!(result.is_ok());
+        // println!("{}", result.unwrap());
+
+        // println!("{:?}", client.get_button_control_set());
     }
 }

@@ -1,6 +1,7 @@
-use crate::device::{EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseMode};
+use crate::device::{ButtonControlSet, EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseMode};
 use argh::FromArgs;
 use std::env;
+use std::str::FromStr;
 
 mod bluetooth;
 mod device;
@@ -42,6 +43,21 @@ struct Args {
         arg_name = "default|pop|classical|rock"
     )]
     equalizer: Option<EqualizerPreset>,
+
+    // #[argh(
+    //     option,
+    //     from_str_fn(parse_button_arg),
+    //     description = "set device button noise cancellation control set [[on]|[off]|[ambient]]",
+    //     arg_name = "[on]|[off]|[ambient]"
+    // )]
+    // button: Option<Vec<NoiseMode>>,
+
+    // #[argh(
+    //     option,
+    //     description = "set device button noise cancellation control set [[on]|[off]|[ambient]]",
+    //     arg_name = "[on]|[off]|[ambient]"
+    // )]
+    // button: Option<ButtonControlSet>,
 
     #[argh(switch, description = "disconnect device")]
     disconnect: bool,
@@ -105,6 +121,12 @@ fn main() {
         println!("Equalizer set to: {}.", preset);
     }
 
+    //todo:
+    // if let Some(set) = args.button {
+    //     client.set_button_control_set(set).unwrap();
+    //     println!("Button control set to: [{}].", set);
+    // }
+
     if args.disconnect {
         client.disconnect_bluetooth().unwrap();
         println!("Device disconnected.");
@@ -141,6 +163,15 @@ fn print_info(client: EdifierClient) -> Result<(), String> {
     println!("LDAC mode: {}", client.get_ldac_mode()?);
     println!("Noise cancellation mode: {}", client.get_noise_mode()?);
     println!("Equalizer preset: {}", client.get_equalizer_preset()?);
+    // println!("Button actions: {}", client.get_button_control_set()?);
+    // println!("Ambient volume: {}", client.get_ambient_volume()?);
 
     Ok(())
+}
+
+fn parse_button_arg(value: &str) -> Result<Vec<NoiseMode>, String> {
+    Ok(value
+        .split('-')
+        .map(|s| NoiseMode::from_str(s).unwrap())
+        .collect())
 }
