@@ -13,6 +13,9 @@ use windows::Win32::Networking::WinSock::{
 };
 use windows_core::GUID;
 
+#[cfg(feature = "debug")]
+use crate::utils::join_hex;
+
 pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
     unsafe {
         let mut wsa_data: WSADATA = zeroed();
@@ -58,8 +61,8 @@ pub(crate) fn disconnect(sock: SOCKET) {
 }
 
 pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
-    use crate::utils::join_hex;
-    println!("Q: [{}]", join_hex(&data, ", "));
+    #[cfg(feature = "debug")]
+    println!("BTQ: [{}]", join_hex(&data, ", "));
 
     let result = unsafe {
         let bytes_sent = WinSock::send(socket, data, SEND_RECV_FLAGS(0));
@@ -76,7 +79,8 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
         buffer[..bytes_read as usize].to_vec()
     };
 
-    println!("R: [{}]", join_hex(&result, ", "));
+    #[cfg(feature = "debug")]
+    println!("BTR: [{}]", join_hex(&result, ", "));
 
     Ok(result)
 }

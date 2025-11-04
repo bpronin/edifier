@@ -1,25 +1,10 @@
 ﻿use std::fmt::Write;
 
-#[macro_export]
-macro_rules! print_discardable {
-    ($($arg:tt)*) => {{
-        print!($($arg)*);
-        std::io::stdout().flush().unwrap();
-    }};
-}
-
-#[macro_export]
-macro_rules! print_discard {
-    () => {{
-        print!("\x1B[2K\r");
-    }};
-}
-
-pub fn split_into_bytes(value: u16) -> [u8; 2] {
+pub(crate) fn split_into_bytes(value: u16) -> [u8; 2] {
     [(value >> 8) as u8, (value & 0xFF) as u8]
 }
 
-pub fn join_hex<T: AsRef<[u8]>>(data: T, delimiter: &str) -> String {
+pub(crate) fn join_hex<T: AsRef<[u8]>>(data: T, delimiter: &str) -> String {
     let bytes = data.as_ref();
     let mut result = String::with_capacity(bytes.len() * (2 + delimiter.len()));
     for (i, b) in bytes.iter().enumerate() {
@@ -31,7 +16,7 @@ pub fn join_hex<T: AsRef<[u8]>>(data: T, delimiter: &str) -> String {
     result
 }
 
-pub fn join_str<E: ToString, T: AsRef<[E]>>(data: T, delimiter: &str) -> String {
+pub(crate) fn join_str<E: ToString, T: AsRef<[E]>>(data: T, delimiter: &str) -> String {
     let bytes = data.as_ref();
     let mut result = String::with_capacity(bytes.len() * (2 + delimiter.len()));
     for (i, b) in bytes.iter().enumerate() {

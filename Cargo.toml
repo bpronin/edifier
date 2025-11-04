@@ -9,3 +9,6 @@ windows-core = "0.62.2"
 argh = "0.1.13"
 strum = "0.27.2"
 strum_macros = "0.27.2"
+
+[features]
+debug = []

@@ -131,8 +131,16 @@ impl EdifierClient {
         Ok(result)
     }
 
-    pub(crate) fn set_noise_mode(&self, mode: NoiseCancellationMode) -> Result<(), String> {
-        self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8]))?;
+    pub(crate) fn set_noise_mode(
+        &self,
+        mode: NoiseCancellationMode,
+        ambient_volume: Option<u8>,
+    ) -> Result<(), String> {
+        if let Some(volume) = ambient_volume {
+            self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8, volume]))?;
+        } else {
+            self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8]))?;
+        }
 
         Ok(())
     }
@@ -142,15 +150,6 @@ impl EdifierClient {
         let value = response.payload().unwrap()[1];
 
         Ok(value)
-    }
-
-    pub(crate) fn set_ambient_volume(&self, volume: u8) -> Result<(), String> {
-        self.send(
-            CMD_SET_NOISE_MODE,
-            Some(&[NoiseCancellationMode::Ambient as u8, volume]),
-        )?;
-
-        Ok(())
     }
 
     pub(crate) fn get_equalizer_preset(&self) -> Result<EqualizerPreset, String> {
@@ -350,29 +349,30 @@ impl Into<Vec<NoiseCancellationMode>> for ButtonControlSet {
 
 #[cfg(test)]
 mod test {
-    use crate::device::NoiseCancellationMode::{Ambient, Off, On};
-    use crate::device::{ButtonControlSet, EdifierClient, NoiseCancellationMode};
+    use super::*;
     use std::sync::{LazyLock, Mutex};
 
     /// Prevents of using same socket in test simultaneously
     static SOCKET_GUARD: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
+    fn get_client() -> EdifierClient {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        EdifierClient::new().unwrap()
+    }
+
     #[test]
     fn test_get_device_name() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
+        let client = get_client();
 
         let name = client.get_device_name();
+
         println!("{:?}", name);
         assert!(name.is_ok());
     }
 
     #[test]
     fn test_set_device_name() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
-
-        let result = client.set_device_name("SOME DEVICE");
+        let result = get_client().set_device_name("SOME DEVICE");
 
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -380,10 +380,7 @@ mod test {
 
     #[test]
     fn test_get_mac_address() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
-
-        let result = client.get_mac_address();
+        let result = get_client().get_mac_address();
 
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -391,10 +388,7 @@ mod test {
 
     #[test]
     fn test_get_battery_level() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
-
-        let result = client.get_battery_level();
+        let result = get_client().get_battery_level();
 
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -402,10 +396,7 @@ mod test {
 
     #[test]
     fn test_get_prompt_volume() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
-
-        let result = client.get_prompt_volume();
+        let result = get_client().get_prompt_volume();
 
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -413,10 +404,7 @@ mod test {
 
     #[test]
     fn test_set_prompt_volume() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
-
-        let result = client.set_prompt_volume(2);
+        let result = get_client().set_prompt_volume(2);
 
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -424,21 +412,7 @@ mod test {
 
     #[test]
     fn test_get_ambient_volume() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
-
-        let result = client.get_ambient_volume();
-
-        println!("{:?}", result);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_set_ambient_volume() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
-
-        let result = client.set_ambient_volume(12);
+        let result = get_client().get_ambient_volume();
 
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -446,21 +420,28 @@ mod test {
 
     #[test]
     fn test_get_noise_mode() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
-
-        let result = client.get_noise_mode();
+        let result = get_client().get_noise_mode();
 
         assert!(result.is_ok());
         println!("{}", result.unwrap());
     }
 
     #[test]
-    fn test_get_button_control_set() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
+    fn test_set_noise_mode() {
+        let result = get_client().set_noise_mode(NoiseCancellationMode::Ambient, Some(12));
 
-        let result = client.get_button_control_set();
+        println!("{:?}", result);
+        assert!(result.is_ok());
+
+        let result = get_client().set_noise_mode(NoiseCancellationMode::On, None);
+
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_button_control_set() {
+        let result = get_client().get_button_control_set();
 
         assert!(result.is_ok());
         println!("{:?}", result.unwrap());
@@ -468,13 +449,10 @@ mod test {
 
     #[test]
     fn test_set_button_control_set() {
-        let _guard = SOCKET_GUARD.lock().unwrap();
-        let client = EdifierClient::new().unwrap();
+        let result = get_client().set_button_control_set(&ButtonControlSet::All.into());
 
-        let result = client.set_button_control_set(&vec![On, Off, Ambient]);
         assert!(result.is_ok());
-
-        println!("{:?}", client.get_button_control_set().unwrap());
+        println!("{:?}", result.unwrap());
     }
 
     #[test]
