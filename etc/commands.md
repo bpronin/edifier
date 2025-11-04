@@ -27,7 +27,7 @@ https://github.com/wh201906/mEDIFIER/blob/main/doc/KnownCommands/W820NB_Double_G
     send: AA 01 D0 21 94  
     read: BB 02 D0 xx yy yy
 
-### Get playback Status?
+### Get playback status?
     send: AA 01 C3 21 87  
     read: BB 02 C3 03 21 9C
 
@@ -45,41 +45,16 @@ https://github.com/wh201906/mEDIFIER/blob/main/doc/KnownCommands/W820NB_Double_G
     send: AA 02 C1 03 21 89  
     read: BB 03 C1 03 06 21 A1
 
-### Set 'Ambient sound' with volume
-**+3**  
+### Set 'Ambient sound' with volume (0..12)
+**12**  
 
-    send: AA 03 C1 03 09 21 93  
-    read: BB 03 C1 03 09 21 A4
-
-**+2**  
-
-    send: AA 03 C1 03 08 21 92  
-    read: BB 03 C1 03 08 21 A3
-
-**+1**  
-
-    send: AA 03 C1 03 07 21 91  
-    read: BB 03 C1 03 07 21 A2
+    send: AA 03 C1 03 0C 21 93  
+    read: BB 03 C1 03 0C 21 A4
 
 **0**  
 
-    send: AA 03 C1 03 06 21 90  
-    read: BB 03 C1 03 06 21 A1
-
-**-1**  
-
-    send: AA 03 C1 03 05 21 8F  
-    read: BB 03 C1 03 05 21 A0
-
-**-2**  
-
-    send: AA 03 C1 03 04 21 8E  
-    read: BB 03 C1 03 04 21 9F
-
-**-3**  
-
-    send: AA 03 C1 03 03 21 8D  
-    read: BB 03 C1 03 03 21 9E
+    send: AA 03 C1 03 00 21 90  
+    read: BB 03 C1 03 00 21 A1
 
 ## Button control set
 

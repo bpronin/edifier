@@ -58,7 +58,8 @@ pub(crate) fn disconnect(sock: SOCKET) {
 }
 
 pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
-    // println!("Q: [{}]", join_hex(&data, ", "));
+    use crate::utils::join_hex;
+    println!("Q: [{}]", join_hex(&data, ", "));
 
     let result = unsafe {
         let bytes_sent = WinSock::send(socket, data, SEND_RECV_FLAGS(0));
@@ -75,7 +76,7 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
         buffer[..bytes_read as usize].to_vec()
     };
 
-    // println!("R: [{}]", join_hex(&result, ", "));
+    println!("R: [{}]", join_hex(&result, ", "));
 
     Ok(result)
 }

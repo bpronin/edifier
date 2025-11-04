@@ -1,4 +1,7 @@
-use crate::device::{EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseCancellationMode};
+use crate::device::{
+    EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseCancellationMode, MAX_AMBIENT_VOLUME,
+    MAX_PROMPT_VOLUME,
+};
 use crate::utils::join_str;
 use argh::FromArgs;
 use std::env;
@@ -19,16 +22,23 @@ struct Args {
     #[argh(option, description = "set device name")]
     name: Option<String>,
 
-    #[argh(option, description = "set prompt volume [0..15]", arg_name = "0..15")]
+    #[argh(option, description = "set prompt volume [0-15]", arg_name = "0-15")]
     prompt_volume: Option<u8>,
+
+    #[argh(
+        option,
+        description = "set ambient sound volume (when NC set to 'ambient') [0-12]",
+        arg_name = "0-12"
+    )]
+    ambient_volume: Option<u8>,
 
     #[argh(option, description = "set game mode [on|off]", arg_name = "on|off")]
     game: Option<GameMode>,
 
     #[argh(
         option,
-        description = "set LDAC mode [k48|k96|off]",
-        arg_name = "k48|k96|off"
+        description = "set LDAC mode [48K|96K|off]",
+        arg_name = "48K|96K|off"
     )]
     ldac: Option<LdacMode>,
 
@@ -46,13 +56,6 @@ struct Args {
     )]
     equalizer: Option<EqualizerPreset>,
 
-    // #[argh(
-    //     option,
-    //     from_str_fn(parse_button_arg),
-    //     description = "set device button noise cancellation control set [[on]|[off]|[ambient]]",
-    //     arg_name = "[on]|[off]|[ambient]"
-    // )]
-    // button: Option<Vec<NoiseCancellationMode>>,
     #[argh(
         option,
         description = "set device button noise cancellation control set [[on]|[off]|[ambient]]",
@@ -105,8 +108,12 @@ fn main() {
     }
 
     if let Some(option) = args.prompt_volume {
-        client.set_prompt_volume(option).unwrap();
-        println!("Prompt volume set to: {}.", option);
+        if option > MAX_PROMPT_VOLUME {
+            println!("Prompt volume must be from 0 to {}.", MAX_PROMPT_VOLUME);
+        } else {
+            client.set_prompt_volume(option).unwrap();
+            println!("Prompt volume set to: {}.", option);
+        }
     }
 
     if let Some(option) = args.game {
@@ -124,6 +131,15 @@ fn main() {
     if let Some(option) = args.noise_cancel {
         client.set_noise_mode(option).unwrap();
         println!("Noise cancellation mode set to: {}.", option);
+    }
+
+    if let Some(option) = args.ambient_volume {
+        if option > MAX_AMBIENT_VOLUME {
+            println!("Ambient volume must be from 0 to {}.", MAX_AMBIENT_VOLUME);
+        } else {
+            client.set_ambient_volume(option).unwrap();
+            println!("Ambient volume set to: {}.", option);
+        }
     }
 
     if let Some(option) = args.equalizer {
@@ -193,11 +209,19 @@ fn print_info(client: EdifierClient) -> Result<(), String> {
     println!("Battery level: {}%", client.get_battery_level()?);
     println!("Firmware version: {}", client.get_firmware_version()?);
     println!("Fingerprint: {}", client.get_fingerprint()?);
-    println!("Prompt volume: {}", client.get_prompt_volume()?);
+    println!(
+        "Prompt volume: {} of {}",
+        client.get_prompt_volume()?,
+        MAX_PROMPT_VOLUME
+    );
     println!("Game mode: {}", client.get_game_mode()?);
     println!("LDAC mode: {}", client.get_ldac_mode()?);
     println!("Noise cancellation mode: {}", client.get_noise_mode()?);
-    // println!("Ambient volume: {}", client.get_ambient_volume()?);
+    println!(
+        "Ambient volume: {} of {}",
+        client.get_ambient_volume()?,
+        MAX_AMBIENT_VOLUME
+    );
     println!("Equalizer preset: {}", client.get_equalizer_preset()?);
     println!(
         "Button actions: [{}]",

@@ -36,123 +36,8 @@ const CMD_GET_FINGERPRINT: u8 = 0xD8;
 const CMD_GET_BUTTON_CONTROL_SET: u8 = 0xF0;
 const CMD_SET_BUTTON_CONTROL_SET: u8 = 0xF1;
 
-#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum PlaybackStatus {
-    Stopped = 0x03,
-    Playing = 0x0D,
-}
-
-#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum GameMode {
-    Off = 0x00,
-    On = 0x01,
-}
-
-#[derive(Debug, Copy, Clone, FromRepr)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum LdacMode {
-    Off = 0x00,
-    K48 = 0x01,
-    K96 = 0x02,
-}
-
-impl FromStr for LdacMode {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_uppercase().as_str() {
-            "OFF" => Ok(Off),
-            "48K" => Ok(K48),
-            "96K" => Ok(K96),
-            _ => Err("Illegal LDAC mode")?,
-        }
-    }
-}
-
-impl Display for LdacMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Off => f.write_str("Off"),
-            K48 => f.write_str("48K"),
-            K96 => f.write_str("96K"),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum EqualizerPreset {
-    Default = 0x00, /* AKA "Classic" */
-    Pop = 0x01,
-    Classical = 0x02,
-    Rock = 0x03,
-}
-
-// #[derive(Copy, Clone, FromRepr, EnumString, Display)]
-// #[repr(u8)]
-// #[strum(ascii_case_insensitive)]
-// pub enum AmbientVolume {
-//     Plus3 = 0x09,
-//     Plus2 = 0x08,
-//     Plus1 = 0x07,
-//     Default = 0x06,
-//     Minus1 = 0x05,
-//     Minus2 = 0x04,
-//     Minus3 = 0x03,
-// }
-
-#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum NoiseCancellationMode {
-    Off = 0x01,
-    On = 0x02,
-    Ambient = 0x03,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum ButtonControlSet {
-    OnOff = 0x03,
-    OnAmbient = 0x06,
-    OffAmbient = 0x05,
-    All = 0x07,
-}
-
-impl From<&Vec<NoiseCancellationMode>> for ButtonControlSet {
-    fn from(set: &Vec<NoiseCancellationMode>) -> Self {
-        use ButtonControlSet::*;
-        use NoiseCancellationMode::*;
-
-        match set {
-            v if v.contains(&On) && v.contains(&Off) && v.contains(&Ambient) => All,
-            v if v.contains(&On) && v.contains(&Off) => OnOff,
-            v if v.contains(&On) && v.contains(&Ambient) => OnAmbient,
-            v if v.contains(&Off) && v.contains(&Ambient) => OffAmbient,
-            _ => panic!("invalid combination"),
-        }
-    }
-}
-
-impl Into<Vec<NoiseCancellationMode>> for ButtonControlSet {
-    fn into(self) -> Vec<NoiseCancellationMode> {
-        use ButtonControlSet::*;
-        use NoiseCancellationMode::*;
-        match self {
-            OnOff => vec![On, Off],
-            OnAmbient => vec![On, Ambient],
-            OffAmbient => vec![Ambient, Off],
-            All => vec![On, Off, Ambient],
-        }
-    }
-}
+pub(crate) const MAX_PROMPT_VOLUME: u8 = 15;
+pub(crate) const MAX_AMBIENT_VOLUME: u8 = 12;
 
 static SPP_UUID: GUID = GUID::from_u128(0xEDF00000_EDFE_DFED_FEDF_EDFEDFEDFEDF);
 
@@ -252,16 +137,21 @@ impl EdifierClient {
         Ok(())
     }
 
-    // pub(crate) fn get_ambient_volume(&self) -> Result<u8, String> {
-    //     let response = self.send(CMD_GET_NOISE_MODE, None)?;
-    //     Ok(response.payload().unwrap()[1] - 2)
-    // }
+    pub(crate) fn get_ambient_volume(&self) -> Result<u8, String> {
+        let response = self.send(CMD_GET_NOISE_MODE, None)?;
+        let value = response.payload().unwrap()[1];
 
-    // pub(crate) fn set_ambient_volume(&self, mode: NoiseMode) -> Result<(), String> {
-    //     self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8]))?;
-    //
-    //     Ok(())
-    // }
+        Ok(value)
+    }
+
+    pub(crate) fn set_ambient_volume(&self, volume: u8) -> Result<(), String> {
+        self.send(
+            CMD_SET_NOISE_MODE,
+            Some(&[NoiseCancellationMode::Ambient as u8, volume]),
+        )?;
+
+        Ok(())
+    }
 
     pub(crate) fn get_equalizer_preset(&self) -> Result<EqualizerPreset, String> {
         let response = self.send(CMD_GET_EQUALIZER_PRESET, None)?;
@@ -353,6 +243,110 @@ impl Drop for EdifierClient {
         bluetooth::disconnect(self.socket);
     }
 }
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
+#[repr(u8)]
+#[strum(ascii_case_insensitive)]
+pub enum PlaybackStatus {
+    Stopped = 0x03,
+    Playing = 0x0D,
+}
+
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
+#[repr(u8)]
+#[strum(ascii_case_insensitive)]
+pub enum GameMode {
+    Off = 0x00,
+    On = 0x01,
+}
+
+#[derive(Debug, Copy, Clone, FromRepr)]
+#[repr(u8)]
+#[strum(ascii_case_insensitive)]
+pub enum LdacMode {
+    Off = 0x00,
+    K48 = 0x01,
+    K96 = 0x02,
+}
+
+impl FromStr for LdacMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_uppercase().as_str() {
+            "OFF" => Ok(Off),
+            "48K" => Ok(K48),
+            "96K" => Ok(K96),
+            _ => Err("Illegal LDAC mode")?,
+        }
+    }
+}
+
+impl Display for LdacMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Off => f.write_str("Off"),
+            K48 => f.write_str("48K"),
+            K96 => f.write_str("96K"),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
+#[repr(u8)]
+#[strum(ascii_case_insensitive)]
+pub enum EqualizerPreset {
+    Default = 0x00, /* AKA "Classic" */
+    Pop = 0x01,
+    Classical = 0x02,
+    Rock = 0x03,
+}
+
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, FromRepr, EnumString, Display)]
+#[repr(u8)]
+#[strum(ascii_case_insensitive)]
+pub enum NoiseCancellationMode {
+    Off = 0x01,
+    On = 0x02,
+    Ambient = 0x03,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, FromRepr, EnumString, Display)]
+#[repr(u8)]
+#[strum(ascii_case_insensitive)]
+pub enum ButtonControlSet {
+    OnOff = 0x03,
+    OnAmbient = 0x06,
+    OffAmbient = 0x05,
+    All = 0x07,
+}
+
+impl From<&Vec<NoiseCancellationMode>> for ButtonControlSet {
+    fn from(set: &Vec<NoiseCancellationMode>) -> Self {
+        use ButtonControlSet::*;
+        use NoiseCancellationMode::*;
+
+        match set {
+            v if v.contains(&On) && v.contains(&Off) && v.contains(&Ambient) => All,
+            v if v.contains(&On) && v.contains(&Off) => OnOff,
+            v if v.contains(&On) && v.contains(&Ambient) => OnAmbient,
+            v if v.contains(&Off) && v.contains(&Ambient) => OffAmbient,
+            _ => panic!("invalid combination"),
+        }
+    }
+}
+
+impl Into<Vec<NoiseCancellationMode>> for ButtonControlSet {
+    fn into(self) -> Vec<NoiseCancellationMode> {
+        use ButtonControlSet::*;
+        use NoiseCancellationMode::*;
+        match self {
+            OnOff => vec![On, Off],
+            OnAmbient => vec![On, Ambient],
+            OffAmbient => vec![Ambient, Off],
+            All => vec![On, Off, Ambient],
+        }
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -423,6 +417,28 @@ mod test {
         let client = EdifierClient::new().unwrap();
 
         let result = client.set_prompt_volume(2);
+
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_ambient_volume() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.get_ambient_volume();
+
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_ambient_volume() {
+        let _guard = SOCKET_GUARD.lock().unwrap();
+        let client = EdifierClient::new().unwrap();
+
+        let result = client.set_ambient_volume(12);
 
         println!("{:?}", result);
         assert!(result.is_ok());
