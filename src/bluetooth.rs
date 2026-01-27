@@ -86,7 +86,7 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 ///
-/// Looks for first devise providing service with specified SPP UUID.
+/// Looks for the first device providing service with specified SPP UUID.
 ///
 fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
     unsafe {

@@ -1,4 +1,7 @@
-﻿use crate::device::LdacMode::{Off, K48, K96};
+﻿use crate::device::ButtonControlSet::{
+    Default, OffAmbient, OffOn, OffOnAmbient, OnAmbient, OnOff, OnOffAmbient,
+};
+use crate::device::LdacMode::{K48, K96, Off};
 use crate::message::EdifierMessage;
 use crate::utils::join_str;
 use crate::{bluetooth, utils};
@@ -166,7 +169,7 @@ impl EdifierClient {
         Ok(())
     }
 
-    pub(crate) fn get_button_control_set(&self) -> Result<Vec<NoiseCancellationMode>, String> {
+    pub(crate) fn get_button_control_set(&self) -> Result<ButtonControlSet, String> {
         let response = self.send(CMD_GET_BUTTON_CONTROL_SET, Some(&[0x0A]))?;
         let value = response.payload().unwrap()[1];
         let result = ButtonControlSet::from_repr(value).unwrap();
@@ -174,11 +177,7 @@ impl EdifierClient {
         Ok(result.into())
     }
 
-    pub(crate) fn set_button_control_set(
-        &self,
-        set: &Vec<NoiseCancellationMode>,
-    ) -> Result<(), String> {
-        let value = ButtonControlSet::from(set);
+    pub(crate) fn set_button_control_set(&self, value: ButtonControlSet) -> Result<(), String> {
         self.send(CMD_SET_BUTTON_CONTROL_SET, Some(&[0x0A, value as u8]))?;
 
         Ok(())
@@ -313,37 +312,40 @@ pub enum NoiseCancellationMode {
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum ButtonControlSet {
-    OnOff = 0x03,
-    OnAmbient = 0x06,
-    OffAmbient = 0x05,
-    All = 0x07,
+    Default = 0,
+    OffOn = 1,
+    OnOff = 3,
+    OffAmbient = 4,
+    OnAmbient = 6,
+    OnOffAmbient = 7,
+    OffOnAmbient = 8,
 }
 
-impl From<&Vec<NoiseCancellationMode>> for ButtonControlSet {
-    fn from(set: &Vec<NoiseCancellationMode>) -> Self {
-        use ButtonControlSet::*;
-        use NoiseCancellationMode::*;
-
-        match set {
-            v if v.contains(&On) && v.contains(&Off) && v.contains(&Ambient) => All,
-            v if v.contains(&On) && v.contains(&Off) => OnOff,
-            v if v.contains(&On) && v.contains(&Ambient) => OnAmbient,
-            v if v.contains(&Off) && v.contains(&Ambient) => OffAmbient,
-            _ => panic!("invalid combination"),
+impl ButtonControlSet {
+    pub(crate) fn from_arg(string: &str) -> Result<ButtonControlSet, String> {
+        match string.trim().to_lowercase() {
+            s if s == "default" => Ok(Default),
+            s if s == "off-on" => Ok(OffOn),
+            s if s == "on-off" => Ok(OnOff),
+            s if s == "off-ambient" => Ok(OffAmbient),
+            s if s == "on-ambient" => Ok(OnAmbient),
+            s if s == "on-off-ambient" => Ok(OnOffAmbient),
+            s if s == "off-on-ambient" => Ok(OffOnAmbient),
+            s => Err(format!("`{s}` is an illegal button control set"))?,
         }
     }
-}
 
-impl Into<Vec<NoiseCancellationMode>> for ButtonControlSet {
-    fn into(self) -> Vec<NoiseCancellationMode> {
-        use ButtonControlSet::*;
-        use NoiseCancellationMode::*;
+    pub(crate) fn to_arg(&self) -> String {
         match self {
-            OnOff => vec![On, Off],
-            OnAmbient => vec![On, Ambient],
-            OffAmbient => vec![Ambient, Off],
-            All => vec![On, Off, Ambient],
+            Default => "default",
+            OffOn => "off-on",
+            OnOff => "on-off",
+            OffAmbient => "off-ambient",
+            OnAmbient => "on-ambient",
+            OnOffAmbient => "on-off-ambient",
+            OffOnAmbient => "off-on-ambient",
         }
+        .to_string()
     }
 }
 
@@ -352,7 +354,7 @@ mod test {
     use super::*;
     use std::sync::{LazyLock, Mutex};
 
-    /// Prevents of using same socket in test simultaneously
+    /// Prevents using the same socket in test simultaneously
     static SOCKET_GUARD: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     fn get_client() -> EdifierClient {
@@ -449,39 +451,37 @@ mod test {
 
     #[test]
     fn test_set_button_control_set() {
-        let result = get_client().set_button_control_set(&ButtonControlSet::All.into());
+        let result = get_client().set_button_control_set(Default);
 
         assert!(result.is_ok());
         println!("{:?}", result.unwrap());
     }
 
     #[test]
-    fn test_button_control_set_from_noise_mode() {
-        use ButtonControlSet::*;
-        use NoiseCancellationMode::*;
-
-        assert_eq!(OnOff, ButtonControlSet::from(&vec![On, Off]));
-        assert_eq!(OnOff, ButtonControlSet::from(&vec![Off, On]));
-        assert_eq!(OnAmbient, ButtonControlSet::from(&vec![On, Ambient]));
-        assert_eq!(OffAmbient, ButtonControlSet::from(&vec![Ambient, Off]));
-        assert_eq!(All, ButtonControlSet::from(&vec![On, Off, Ambient]));
+    fn test_button_control_set_to_arg() {
+        assert_eq!("on-off", OnOff.to_arg().as_str());
+        assert_eq!("off-ambient", OffAmbient.to_arg().as_str());
+        assert_eq!("on-ambient", OnAmbient.to_arg().as_str());
+        assert_eq!("on-off-ambient", OnOffAmbient.to_arg().as_str());
+        assert_eq!("off-on-ambient", OffOnAmbient.to_arg().as_str());
+        assert_eq!("default", Default.to_arg().as_str());
     }
 
     #[test]
-    fn test_button_control_set_into_noise_mode() {
+    fn test_button_control_set_from_arg() {
         use ButtonControlSet::*;
-        use NoiseCancellationMode::*;
 
-        let mut v: Vec<NoiseCancellationMode> = OnOff.into();
-        assert_eq!(vec![On, Off], v);
+        assert_eq!(Ok(OnOff), ButtonControlSet::from_arg("on-off"));
+        assert_eq!(Ok(OffOn), ButtonControlSet::from_arg("off-on"));
+        assert_eq!(Ok(OffAmbient), ButtonControlSet::from_arg("off-ambient"));
+        assert_eq!(Ok(OnAmbient), ButtonControlSet::from_arg("on-ambient"));
+        assert_eq!(Ok(OnOffAmbient), ButtonControlSet::from_arg("on-off-ambient"));
+        assert_eq!(Ok(OffOnAmbient), ButtonControlSet::from_arg("off-on-ambient"));
 
-        v = OnAmbient.into();
-        assert_eq!(vec![On, Ambient], v);
-
-        v = OffAmbient.into();
-        assert_eq!(vec![Ambient, Off], v);
-
-        v = All.into();
-        assert_eq!(vec![On, Off, Ambient], v);
+        assert_eq!(Ok(OnOff), ButtonControlSet::from_arg("ON-OFF"));
+        assert_eq!(
+            Err("`banana` is an illegal button control set".to_string()),
+            ButtonControlSet::from_arg("banana")
+        );
     }
 }

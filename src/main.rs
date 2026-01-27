@@ -1,8 +1,7 @@
 use crate::device::{
-    EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseCancellationMode, MAX_AMBIENT_VOLUME,
-    MAX_PROMPT_VOLUME,
+    ButtonControlSet, EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseCancellationMode,
+    MAX_AMBIENT_VOLUME, MAX_PROMPT_VOLUME,
 };
-use crate::utils::join_str;
 use argh::FromArgs;
 use std::env;
 use std::io::stdin;
@@ -16,20 +15,31 @@ mod utils;
 #[derive(FromArgs)]
 #[argh(description = "Tool to control Edifier devices")]
 struct Args {
-    #[argh(switch, description = "print device current status")]
+    #[argh(switch, short = 'i', description = "print device current status")]
     info: bool,
 
-    #[argh(option, description = "set device name")]
+    #[argh(option, short = 'a', description = "set device name")]
     name: Option<String>,
 
-    #[argh(option, description = "set prompt volume [0-15]", arg_name = "0-15")]
+    #[argh(
+        option,
+        short = 'v',
+        description = "set prompt volume [0-15]",
+        arg_name = "0-15"
+    )]
     prompt_volume: Option<u8>,
 
-    #[argh(option, description = "set game mode [on|off]", arg_name = "on|off")]
+    #[argh(
+        option,
+        short = 'g',
+        description = "set game mode [on|off]",
+        arg_name = "on|off"
+    )]
     game: Option<GameMode>,
 
     #[argh(
         option,
+        short = 'l',
         description = "set LDAC mode [48K|96K|off]",
         arg_name = "48K|96K|off"
     )]
@@ -37,6 +47,7 @@ struct Args {
 
     #[argh(
         option,
+        short = 'n',
         description = "set noise cancellation mode [on|off|ambient[-<volume>]]",
         arg_name = "on|off|ambient[-<volume>]"
     )]
@@ -44,6 +55,7 @@ struct Args {
 
     #[argh(
         option,
+        short = 'e',
         description = "set equalizer preset [default|pop|classical|rock]",
         arg_name = "default|pop|classical|rock"
     )]
@@ -51,21 +63,22 @@ struct Args {
 
     #[argh(
         option,
-        description = "set device button noise cancellation control set [[on]|[off]|[ambient]]",
-        arg_name = "[on]|[off]|[ambient]"
+        short = 'b',
+        description = "set device round button noise cancellation control set [on-off|off-on|on-ambient|off-ambient|on-off-ambient|off-on-ambient]",
+        arg_name = "on-off|off-on|on-ambient|off-ambient|on-off-ambient|off-on-ambient"
     )]
     button: Option<String>,
 
-    #[argh(switch, description = "disconnect device")]
+    #[argh(switch, short = 'd', description = "disconnect device")]
     disconnect: bool,
 
-    #[argh(switch, description = "power off device")]
+    #[argh(switch, short = 'p', description = "power off device")]
     power_off: bool,
 
-    #[argh(switch, description = "re-pair device")]
+    #[argh(switch, short = 'x', description = "re-pair device")]
     re_pair: bool,
 
-    #[argh(switch, description = "reset device to factory defaults")]
+    #[argh(switch, short = 'r', description = "reset device to factory defaults")]
     reset: bool,
 
     #[argh(
@@ -137,19 +150,9 @@ fn main() {
     }
 
     if let Some(option) = args.button {
-        match option
-            .split('-')
-            .map(|s| NoiseCancellationMode::from_str(s))
-            .collect()
-        {
-            Ok(set) => {
-                client.set_button_control_set(&set).unwrap();
-                println!("Button actions set to: [{}].", join_str(set, ", "));
-            }
-            Err(_) => {
-                println!("Invalid control set: '{option}'");
-            }
-        }
+        let value = ButtonControlSet::from_arg(option.as_str()).unwrap();
+        client.set_button_control_set(value).unwrap();
+        println!("Button actions set to: [{}].", value);
     }
 
     /* Unsafe actions */
@@ -226,7 +229,7 @@ fn print_info(client: EdifierClient) -> Result<(), String> {
     );
     println!(
         "Control button actions: [{}]",
-        join_str(client.get_button_control_set()?, ", ")
+        client.get_button_control_set()?.to_arg()
     );
     println!("Game mode: {}", client.get_game_mode()?);
     println!("Equalizer preset: {}", client.get_equalizer_preset()?);
