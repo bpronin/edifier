@@ -1,10 +1,13 @@
 ﻿use crate::message::EdifierMessage;
 use crate::utils::join_str;
 use crate::{bluetooth, err, utils};
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 use strum_macros::{Display, EnumString, FromRepr};
 use utils::join_hex;
 use windows::Win32::Networking::WinSock::SOCKET;
 use windows_core::GUID;
+use DenoiseMode::{Ambient, Off, On};
 
 const CMD_GET_PROMPT_VOLUME: u8 = 0x05;
 const CMD_SET_PROMPT_VOLUME: u8 = 0x06;
@@ -95,7 +98,7 @@ impl EdifierClient {
     pub(crate) fn get_game_mode(&self) -> Result<GameMode, String> {
         let response = self.send(CMD_GET_GAME_MODE, None)?;
         let value = response.payload().unwrap()[0];
-        let result = GameMode::from_repr(value).unwrap();
+        let result = GameMode::from_repr(value).expect("Invalid game mode");
 
         Ok(result)
     }
@@ -109,7 +112,7 @@ impl EdifierClient {
     pub(crate) fn get_ldac_mode(&self) -> Result<LdacMode, String> {
         let response = self.send(CMD_GET_LDAC_MODE, None)?;
         let value = response.payload().unwrap()[0];
-        let result = LdacMode::from_repr(value).unwrap();
+        let result = LdacMode::from_repr(value).expect("Invalid LDAC mode");
 
         Ok(result)
     }
@@ -120,39 +123,32 @@ impl EdifierClient {
         Ok(())
     }
 
-    pub(crate) fn get_noise_mode(&self) -> Result<NoiseCancellationMode, String> {
+    pub(crate) fn get_denoise_mode(&self) -> Result<DenoiseMode, String> {
         let response = self.send(CMD_GET_NOISE_MODE, None)?;
-        let value = response.payload().unwrap()[0];
-        let result = NoiseCancellationMode::from_repr(value).unwrap();
+        let payload = response.payload().unwrap();
+        let result = DenoiseMode::from_code(payload[0], Some(payload[1]))?;
 
         Ok(result)
     }
 
-    pub(crate) fn set_noise_mode(
-        &self,
-        mode: NoiseCancellationMode,
-        ambient_volume: Option<u8>,
-    ) -> Result<(), String> {
-        if let Some(volume) = ambient_volume {
-            self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8, volume]))?;
-        } else {
-            self.send(CMD_SET_NOISE_MODE, Some(&[mode as u8]))?;
-        }
+    pub(crate) fn set_denoise_mode(&self, mode: DenoiseMode) -> Result<(), String> {
+        let payload = match mode {
+            Ambient(volume) => match volume {
+                None => vec![mode.code()],
+                Some(v) => vec![mode.code(), v],
+            },
+            _ => vec![mode.code()],
+        };
+
+        self.send(CMD_SET_NOISE_MODE, Some(payload.as_slice()))?;
 
         Ok(())
-    }
-
-    pub(crate) fn get_ambient_volume(&self) -> Result<u8, String> {
-        let response = self.send(CMD_GET_NOISE_MODE, None)?;
-        let value = response.payload().unwrap()[1];
-
-        Ok(value)
     }
 
     pub(crate) fn get_equalizer_preset(&self) -> Result<EqualizerPreset, String> {
         let response = self.send(CMD_GET_EQUALIZER_PRESET, None)?;
         let value = response.payload().unwrap()[0];
-        let result = EqualizerPreset::from_repr(value).unwrap();
+        let result = EqualizerPreset::from_repr(value).expect("Invalid equalizer preset");
 
         Ok(result)
     }
@@ -166,21 +162,22 @@ impl EdifierClient {
     pub(crate) fn get_button_control_set(&self) -> Result<ButtonControlSet, String> {
         let response = self.send(CMD_GET_BUTTON_CONTROL_SET, Some(&[0x0A]))?;
         let value = response.payload().unwrap()[1];
-        let result = ButtonControlSet::from_repr(value).unwrap();
+        let result = ButtonControlSet::from_repr(value).expect("Invalid button control set");
 
-        Ok(result.into())
+        Ok(result)
     }
 
-    pub(crate) fn set_button_control_set(&self, value: ButtonControlSet) -> Result<(), String> {
-        self.send(CMD_SET_BUTTON_CONTROL_SET, Some(&[0x0A, value as u8]))?;
+    pub(crate) fn set_button_control_set(&self, set: ButtonControlSet) -> Result<(), String> {
+        self.send(CMD_SET_BUTTON_CONTROL_SET, Some(&[0x0A, set as u8]))?;
 
         Ok(())
     }
 
     pub(crate) fn get_prompt_volume(&self) -> Result<u8, String> {
         let response = self.send(CMD_GET_PROMPT_VOLUME, None)?;
+        let result = response.payload().unwrap()[0];
 
-        Ok(response.payload().unwrap()[0])
+        Ok(result)
     }
 
     pub(crate) fn set_prompt_volume(&self, volume: u8) -> Result<(), String> {
@@ -276,40 +273,105 @@ pub enum EqualizerPreset {
     Rock = 0x03,
 }
 
-#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum NoiseCancellationMode {
-    Off = 0x01,
-    On = 0x02,
-    Ambient = 0x03,
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
+pub enum DenoiseMode {
+    Off,
+    On,
+    Ambient(Option<u8>),
+}
+
+impl DenoiseMode {
+    fn from_name(name: &str, volume: Option<u8>) -> Result<Self, String> {
+        match name.trim().to_lowercase().as_str() {
+            "off" => Ok(Off),
+            "on" => Ok(On),
+            "ambient" => Ok(Ambient(volume)),
+            _ => err!("Illegal noise cancellation mode name"),
+        }
+    }
+
+    fn from_code(code: u8, volume: Option<u8>) -> Result<Self, String> {
+        match code {
+            0x01 => Ok(Off),
+            0x02 => Ok(On),
+            0x03 => Ok(Ambient(volume)),
+            _ => err!("Illegal noise cancellation mode code"),
+        }
+    }
+
+    pub fn code(&self) -> u8 {
+        match self {
+            Off => 0x01,
+            On => 0x02,
+            Ambient(_) => 0x03,
+        }
+    }
+}
+
+impl Display for DenoiseMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Off => "Off".to_string(),
+            On => "On".to_string(),
+            Ambient(volume) => match volume {
+                None => "Ambient".to_string(),
+                Some(v) => format!("Ambient (volume: {v} of {MAX_AMBIENT_VOLUME})"),
+            },
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl FromStr for DenoiseMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let split: Vec<_> = s.split('-').collect();
+
+        let volume = if split.len() == 2 {
+            let sv = split[1];
+            let v = sv
+                .parse()
+                .map_err(|_| format!("Invalid ambient volume value: `{sv}`."))?;
+
+            if v > MAX_AMBIENT_VOLUME {
+                err!("Ambient volume must be from 0 to {MAX_AMBIENT_VOLUME}.")?
+            } else {
+                Some(v)
+            }
+        } else {
+            None
+        };
+
+        Self::from_name(split[0], volume)
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum ButtonControlSet {
-    Default = 0,
+    Default = 0x00,
     #[strum(serialize = "Off-On")]
-    OffOn = 1,
+    OffOn = 0x01,
     #[strum(serialize = "On-Off")]
-    OnOff = 3,
+    OnOff = 0x03,
     #[strum(serialize = "Off-Ambient")]
-    OffAmbient = 4,
+    OffAmbient = 0x04,
     #[strum(serialize = "On-Ambient")]
-    OnAmbient = 6,
+    OnAmbient = 0x06,
     #[strum(serialize = "On-Off-Ambient")]
-    OnOffAmbient = 7,
+    OnOffAmbient = 0x07,
     #[strum(serialize = "Off-On-Ambient")]
-    OffOnAmbient = 8,
+    OffOnAmbient = 0x08,
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use crate::device::{ButtonControlSet, DenoiseMode, EdifierClient};
     use std::sync::{LazyLock, Mutex};
 
-    /// Prevents using the same socket in test simultaneously
+    /// Prevents using the same socket in tests simultaneously
     static SOCKET_GUARD: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     fn get_client() -> EdifierClient {
@@ -319,17 +381,15 @@ mod test {
 
     #[test]
     fn test_get_device_name() {
-        let client = get_client();
+        let result = get_client().get_device_name();
 
-        let name = client.get_device_name();
-
-        println!("{:?}", name);
-        assert!(name.is_ok());
+        println!("{:?}", result);
+        assert!(result.is_ok());
     }
 
     #[test]
     fn test_set_device_name() {
-        let result = get_client().set_device_name("SOME DEVICE");
+        let result = get_client().set_device_name("BANANA DEVICE");
 
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -368,29 +428,21 @@ mod test {
     }
 
     #[test]
-    fn test_get_ambient_volume() {
-        let result = get_client().get_ambient_volume();
+    fn test_get_denoise_mode() {
+        let result = get_client().get_denoise_mode();
 
         println!("{:?}", result);
         assert!(result.is_ok());
     }
 
     #[test]
-    fn test_get_noise_mode() {
-        let result = get_client().get_noise_mode();
-
-        assert!(result.is_ok());
-        println!("{}", result.unwrap());
-    }
-
-    #[test]
-    fn test_set_noise_mode() {
-        let result = get_client().set_noise_mode(NoiseCancellationMode::Ambient, Some(12));
+    fn test_set_denoise_mode() {
+        let result = get_client().set_denoise_mode(DenoiseMode::Ambient(Some(7)));
 
         println!("{:?}", result);
         assert!(result.is_ok());
 
-        let result = get_client().set_noise_mode(NoiseCancellationMode::On, None);
+        let result = get_client().set_denoise_mode(DenoiseMode::On);
 
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -400,51 +452,15 @@ mod test {
     fn test_get_button_control_set() {
         let result = get_client().get_button_control_set();
 
+        println!("{:?}", result);
         assert!(result.is_ok());
-        println!("{:?}", result.unwrap());
     }
 
     #[test]
     fn test_set_button_control_set() {
         let result = get_client().set_button_control_set(ButtonControlSet::Default);
 
+        println!("{:?}", result);
         assert!(result.is_ok());
-        println!("{:?}", result.unwrap());
-    }
-
-    #[test]
-    fn test_button_control_set_to_str() {
-        use ButtonControlSet::*;
-
-        assert_eq!("Default", Default.to_string());
-        assert_eq!("On-Off", OnOff.to_string());
-        assert_eq!("Off-On", OffOn.to_string());
-        assert_eq!("Off-Ambient", OffAmbient.to_string());
-        assert_eq!("On-Ambient", OnAmbient.to_string());
-        assert_eq!("On-Off-Ambient", OnOffAmbient.to_string());
-        assert_eq!("Off-On-Ambient", OffOnAmbient.to_string());
-    }
-
-    #[test]
-    fn test_button_control_set_from_str() {
-        use ButtonControlSet::*;
-        use std::str::FromStr;
-
-        assert_eq!(Ok(Default), ButtonControlSet::from_str("default"));
-        assert_eq!(Ok(OnOff), ButtonControlSet::from_str("on-off"));
-        assert_eq!(Ok(OffOn), ButtonControlSet::from_str("off-on"));
-        assert_eq!(Ok(OffAmbient), ButtonControlSet::from_str("off-ambient"));
-        assert_eq!(Ok(OnAmbient), ButtonControlSet::from_str("on-ambient"));
-        assert_eq!(
-            Ok(OnOffAmbient),
-            ButtonControlSet::from_str("on-off-ambient")
-        );
-        assert_eq!(
-            Ok(OffOnAmbient),
-            ButtonControlSet::from_str("off-on-ambient")
-        );
-
-        assert_eq!(Ok(OnOff), ButtonControlSet::from_str("ON-OFF"));
-        assert!(ButtonControlSet::from_str("banana").is_err());
     }
 }

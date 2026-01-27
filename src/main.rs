@@ -1,11 +1,10 @@
 use crate::device::{
-    ButtonControlSet, EdifierClient, EqualizerPreset, GameMode, LdacMode, NoiseCancellationMode,
-    MAX_AMBIENT_VOLUME, MAX_PROMPT_VOLUME,
+    ButtonControlSet, DenoiseMode, EdifierClient, EqualizerPreset, GameMode, LdacMode,
+    MAX_PROMPT_VOLUME,
 };
 use argh::FromArgs;
 use std::env;
 use std::io::{stdin, stdout, Write};
-use std::str::FromStr;
 
 mod bluetooth;
 mod device;
@@ -51,7 +50,7 @@ struct Args {
         description = "set noise cancellation mode [on|off|ambient[-<volume>]]",
         arg_name = "on|off|ambient[-<volume>]"
     )]
-    denoise: Option<String>,
+    denoise: Option<DenoiseMode>,
 
     #[argh(
         option,
@@ -111,7 +110,11 @@ fn main() {
     }
 
     if let Some(option) = args.denoise {
-        run_safe_action(|| set_denoise(&client, option));
+        run_safe_action(|| {
+            client
+                .set_denoise_mode(option)
+                .and_then(|_| Ok(println!("Noise cancellation mode set to: {option}.")))
+        });
     }
 
     if let Some(option) = args.name {
@@ -154,13 +157,13 @@ fn main() {
         });
     }
 
-    /* Unsafe actions */
+    /* Actions that require device disconnection. */
 
     if let Some(option) = args.ldac {
         run_unsafe_action(args.no_confirm, || {
             client
                 .set_ldac_mode(option)
-                .and_then(|_| Ok(println!("LDAC mode set to: {}.", option)))
+                .and_then(|_| Ok(println!("LDAC mode set to: {option}.")))
         })
     }
 
@@ -230,12 +233,12 @@ fn print_info(client: &EdifierClient) -> Result<(), String> {
     println!("Device name: {}", client.get_device_name()?);
     println!("LDAC mode: {}", client.get_ldac_mode()?);
     println!("Battery level: {}%", client.get_battery_level()?);
-    println!("Noise cancellation mode: {}", client.get_noise_mode()?);
-    println!(
-        "Ambient mode volume: {} of {}",
-        client.get_ambient_volume()?,
-        MAX_AMBIENT_VOLUME
-    );
+    println!("Noise cancellation mode: {}", client.get_denoise_mode()?);
+    // println!(
+    //     "Ambient mode volume: {} of {}",
+    //     client.get_ambient_volume()?,
+    //     MAX_AMBIENT_VOLUME
+    // );
     println!(
         "Prompt voice volume: {} of {}",
         client.get_prompt_volume()?,
@@ -254,28 +257,28 @@ fn print_info(client: &EdifierClient) -> Result<(), String> {
     Ok(())
 }
 
-fn set_denoise(client: &EdifierClient, option: String) -> Result<(), String> {
-    let split: Vec<&str> = option.split('-').collect();
-    let mode = NoiseCancellationMode::from_str(split[0])
-        .map_err(|_| format!("Invalid noise cancellation mode value: `{option}`."))?;
+// fn set_denoise(client: &EdifierClient, option: String) -> Result<(), String> {
+// let split: Vec<&str> = option.split('-').collect();
+// let mode = NoiseCancellationMode::from_str(split[0])
+//     .map_err(|_| format!("Invalid noise cancellation mode value: `{option}`."))?;
+//
+// if split.len() == 1 {
+//     client.set_noise_mode(mode, None)?;
+//     println!("Noise cancellation mode set to: {mode}.");
+// } else if split.len() == 2 && mode == NoiseCancellationMode::Ambient {
+//     let volume: u8 = split[1]
+//         .parse()
+//         .map_err(|_| format!("Invalid ambient volume value: `{option}`."))?;
+//
+//     if volume > MAX_AMBIENT_VOLUME {
+//         return err!("Ambient volume must be from 0 to {MAX_AMBIENT_VOLUME}.");
+//     } else {
+//         client.set_noise_mode(mode, Some(volume))?;
+//         println!("Noise cancellation mode set to: {mode} (volume {volume}).");
+//     }
+// } else {
+//     return err!("Invalid noise cancellation mode value: {option}.");
+// }
 
-    if split.len() == 1 {
-        client.set_noise_mode(mode, None)?;
-        println!("Noise cancellation mode set to: {mode}.");
-    } else if split.len() == 2 && mode == NoiseCancellationMode::Ambient {
-        let volume: u8 = split[1]
-            .parse()
-            .map_err(|_| format!("Invalid ambient volume value: `{option}`."))?;
-
-        if volume > MAX_AMBIENT_VOLUME {
-            return err!("Ambient volume must be from 0 to {MAX_AMBIENT_VOLUME}.");
-        } else {
-            client.set_noise_mode(mode, Some(volume))?;
-            println!("Noise cancellation mode set to: {mode} (volume {volume}).");
-        }
-    } else {
-        return err!("Invalid noise cancellation mode value: {option}.");
-    }
-
-    Ok(())
-}
+// Ok(())
+// }
