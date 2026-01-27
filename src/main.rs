@@ -109,13 +109,6 @@ fn main() {
         println!("Game mode set to: {}.", option);
     }
 
-    if let Some(option) = args.ldac {
-        if args.no_confirm || confirm_disconnect() {
-            client.set_ldac_mode(option).unwrap();
-            println!("LDAC mode set to: {}.", option);
-        }
-    }
-
     if let Some(option) = args.noise_cancel {
         let split: Vec<&str> = option.split('-').collect();
         let mode = NoiseCancellationMode::from_str(split[0]).unwrap();
@@ -128,7 +121,10 @@ fn main() {
                 println!("Ambient volume must be from 0 to {}.", MAX_AMBIENT_VOLUME);
             } else {
                 client.set_noise_mode(mode, Some(volume)).unwrap();
-                println!("Noise cancellation mode set to: {} (volume {}).", mode, volume);
+                println!(
+                    "Noise cancellation mode set to: {} (volume {}).",
+                    mode, volume
+                );
             }
         } else {
             println!("Invalid noise cancellation mode value: {}.", option);
@@ -156,32 +152,49 @@ fn main() {
         }
     }
 
-    if args.disconnect {
+    /* Unsafe actions */
+
+    let do_unsafe_action = |action: &dyn Fn()| {
         if args.no_confirm || confirm_disconnect() {
+            action();
+        } else {
+            println!("Operation cancelled.");
+        }
+    };
+
+    if args.disconnect {
+        do_unsafe_action(&|| {
             client.disconnect_bluetooth().unwrap();
             println!("Device disconnected.");
-        }
-    }
+        })
+    };
 
     if args.re_pair {
-        if args.no_confirm || confirm_disconnect() {
+        do_unsafe_action(&|| {
             client.re_pair().unwrap();
             println!("Re-pairing device.");
-        }
+        })
     }
 
     if args.power_off {
-        if args.no_confirm || confirm_disconnect() {
+        do_unsafe_action(&|| {
             client.power_off().unwrap();
             println!("Device powered off.");
-        }
+        })
     }
 
     if args.reset {
-        if args.no_confirm || confirm_disconnect() {
+        do_unsafe_action(&|| {
             client.reset_factory_defaults().unwrap();
             println!("Device settings reset to factory defaults.");
-        }
+        })
+    }
+
+    if let Some(option) = args.ldac {
+        do_unsafe_action(&|| {
+            client.set_ldac_mode(option).unwrap();
+            println!("LDAC mode set to: {}.", option);
+        })
     }
 
     if args.info {
@@ -198,28 +211,28 @@ fn confirm_disconnect() -> bool {
 
 fn print_info(client: EdifierClient) -> Result<(), String> {
     println!("Device name: {}", client.get_device_name()?);
-    println!("Mac address: {}", client.get_mac_address()?);
-    println!("Battery level: {}%", client.get_battery_level()?);
-    println!("Firmware version: {}", client.get_firmware_version()?);
-    println!("Fingerprint: {}", client.get_fingerprint()?);
-    println!(
-        "Prompt volume: {} of {}",
-        client.get_prompt_volume()?,
-        MAX_PROMPT_VOLUME
-    );
-    println!("Game mode: {}", client.get_game_mode()?);
     println!("LDAC mode: {}", client.get_ldac_mode()?);
+    println!("Battery level: {}%", client.get_battery_level()?);
     println!("Noise cancellation mode: {}", client.get_noise_mode()?);
     println!(
-        "Ambient volume: {} of {}",
+        "Ambient mode volume: {} of {}",
         client.get_ambient_volume()?,
         MAX_AMBIENT_VOLUME
     );
-    println!("Equalizer preset: {}", client.get_equalizer_preset()?);
     println!(
-        "Button actions: [{}]",
+        "Prompt voice volume: {} of {}",
+        client.get_prompt_volume()?,
+        MAX_PROMPT_VOLUME
+    );
+    println!(
+        "Control button actions: [{}]",
         join_str(client.get_button_control_set()?, ", ")
     );
+    println!("Game mode: {}", client.get_game_mode()?);
+    println!("Equalizer preset: {}", client.get_equalizer_preset()?);
+    println!("Mac address: {}", client.get_mac_address()?);
+    println!("Firmware version: {}", client.get_firmware_version()?);
+    println!("Fingerprint: {}", client.get_fingerprint()?);
 
     Ok(())
 }
