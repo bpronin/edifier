@@ -27,3 +27,10 @@ pub(crate) fn join_str<E: ToString, T: AsRef<[E]>>(data: T, delimiter: &str) -> 
     }
     result
 }
+
+#[macro_export]
+macro_rules! err {
+    ($($arg:tt)*) => {
+        Err(format!($($arg)*))
+    };
+}

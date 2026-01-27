@@ -1,12 +1,6 @@
-﻿use crate::device::ButtonControlSet::{
-    Default, OffAmbient, OffOn, OffOnAmbient, OnAmbient, OnOff, OnOffAmbient,
-};
-use crate::device::LdacMode::{K48, K96, Off};
-use crate::message::EdifierMessage;
+﻿use crate::message::EdifierMessage;
 use crate::utils::join_str;
-use crate::{bluetooth, utils};
-use std::fmt::Display;
-use std::str::FromStr;
+use crate::{bluetooth, err, utils};
 use strum_macros::{Display, EnumString, FromRepr};
 use utils::join_hex;
 use windows::Win32::Networking::WinSock::SOCKET;
@@ -190,9 +184,13 @@ impl EdifierClient {
     }
 
     pub(crate) fn set_prompt_volume(&self, volume: u8) -> Result<(), String> {
-        self.send(CMD_SET_PROMPT_VOLUME, Some(&[volume]))?;
+        if volume > MAX_PROMPT_VOLUME {
+            err!("Prompt volume must be from 0 to {MAX_PROMPT_VOLUME}.")
+        } else {
+            self.send(CMD_SET_PROMPT_VOLUME, Some(&[volume]))?;
 
-        Ok(())
+            Ok(())
+        }
     }
 
     pub(crate) fn re_pair(&self) -> Result<(), String> {
@@ -225,11 +223,11 @@ impl EdifierClient {
 
         /*if response.command_code() != request.command_code() {
             //todo: is [BB, 02, C3, 0D, 21, A6] an error?
-            return Err(format!(
+            return format_err!(
                 "Response {} does not match request command [{:#04X}]",
                 response,
                 request.command_code().unwrap()
-            ));
+            );
         }*/
 
         Ok(response)
@@ -257,36 +255,15 @@ pub enum GameMode {
     On = 0x01,
 }
 
-#[derive(Debug, Copy, Clone, FromRepr)]
+#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum LdacMode {
     Off = 0x00,
+    #[strum(serialize = "48K")]
     K48 = 0x01,
+    #[strum(serialize = "96K")]
     K96 = 0x02,
-}
-
-impl FromStr for LdacMode {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_uppercase().as_str() {
-            "OFF" => Ok(Off),
-            "48K" => Ok(K48),
-            "96K" => Ok(K96),
-            _ => Err("Illegal LDAC mode")?,
-        }
-    }
-}
-
-impl Display for LdacMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Off => f.write_str("Off"),
-            K48 => f.write_str("48K"),
-            K96 => f.write_str("96K"),
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
@@ -313,40 +290,18 @@ pub enum NoiseCancellationMode {
 #[strum(ascii_case_insensitive)]
 pub enum ButtonControlSet {
     Default = 0,
+    #[strum(serialize = "Off-On")]
     OffOn = 1,
+    #[strum(serialize = "On-Off")]
     OnOff = 3,
+    #[strum(serialize = "Off-Ambient")]
     OffAmbient = 4,
+    #[strum(serialize = "On-Ambient")]
     OnAmbient = 6,
+    #[strum(serialize = "On-Off-Ambient")]
     OnOffAmbient = 7,
+    #[strum(serialize = "Off-On-Ambient")]
     OffOnAmbient = 8,
-}
-
-impl ButtonControlSet {
-    pub(crate) fn from_arg(string: &str) -> Result<ButtonControlSet, String> {
-        match string.trim().to_lowercase() {
-            s if s == "default" => Ok(Default),
-            s if s == "off-on" => Ok(OffOn),
-            s if s == "on-off" => Ok(OnOff),
-            s if s == "off-ambient" => Ok(OffAmbient),
-            s if s == "on-ambient" => Ok(OnAmbient),
-            s if s == "on-off-ambient" => Ok(OnOffAmbient),
-            s if s == "off-on-ambient" => Ok(OffOnAmbient),
-            s => Err(format!("`{s}` is an illegal button control set"))?,
-        }
-    }
-
-    pub(crate) fn to_arg(&self) -> String {
-        match self {
-            Default => "default",
-            OffOn => "off-on",
-            OnOff => "on-off",
-            OffAmbient => "off-ambient",
-            OnAmbient => "on-ambient",
-            OnOffAmbient => "on-off-ambient",
-            OffOnAmbient => "off-on-ambient",
-        }
-        .to_string()
-    }
 }
 
 #[cfg(test)]
@@ -451,37 +406,45 @@ mod test {
 
     #[test]
     fn test_set_button_control_set() {
-        let result = get_client().set_button_control_set(Default);
+        let result = get_client().set_button_control_set(ButtonControlSet::Default);
 
         assert!(result.is_ok());
         println!("{:?}", result.unwrap());
     }
 
     #[test]
-    fn test_button_control_set_to_arg() {
-        assert_eq!("on-off", OnOff.to_arg().as_str());
-        assert_eq!("off-ambient", OffAmbient.to_arg().as_str());
-        assert_eq!("on-ambient", OnAmbient.to_arg().as_str());
-        assert_eq!("on-off-ambient", OnOffAmbient.to_arg().as_str());
-        assert_eq!("off-on-ambient", OffOnAmbient.to_arg().as_str());
-        assert_eq!("default", Default.to_arg().as_str());
+    fn test_button_control_set_to_str() {
+        use ButtonControlSet::*;
+
+        assert_eq!("Default", Default.to_string());
+        assert_eq!("On-Off", OnOff.to_string());
+        assert_eq!("Off-On", OffOn.to_string());
+        assert_eq!("Off-Ambient", OffAmbient.to_string());
+        assert_eq!("On-Ambient", OnAmbient.to_string());
+        assert_eq!("On-Off-Ambient", OnOffAmbient.to_string());
+        assert_eq!("Off-On-Ambient", OffOnAmbient.to_string());
     }
 
     #[test]
-    fn test_button_control_set_from_arg() {
+    fn test_button_control_set_from_str() {
         use ButtonControlSet::*;
+        use std::str::FromStr;
 
-        assert_eq!(Ok(OnOff), ButtonControlSet::from_arg("on-off"));
-        assert_eq!(Ok(OffOn), ButtonControlSet::from_arg("off-on"));
-        assert_eq!(Ok(OffAmbient), ButtonControlSet::from_arg("off-ambient"));
-        assert_eq!(Ok(OnAmbient), ButtonControlSet::from_arg("on-ambient"));
-        assert_eq!(Ok(OnOffAmbient), ButtonControlSet::from_arg("on-off-ambient"));
-        assert_eq!(Ok(OffOnAmbient), ButtonControlSet::from_arg("off-on-ambient"));
-
-        assert_eq!(Ok(OnOff), ButtonControlSet::from_arg("ON-OFF"));
+        assert_eq!(Ok(Default), ButtonControlSet::from_str("default"));
+        assert_eq!(Ok(OnOff), ButtonControlSet::from_str("on-off"));
+        assert_eq!(Ok(OffOn), ButtonControlSet::from_str("off-on"));
+        assert_eq!(Ok(OffAmbient), ButtonControlSet::from_str("off-ambient"));
+        assert_eq!(Ok(OnAmbient), ButtonControlSet::from_str("on-ambient"));
         assert_eq!(
-            Err("`banana` is an illegal button control set".to_string()),
-            ButtonControlSet::from_arg("banana")
+            Ok(OnOffAmbient),
+            ButtonControlSet::from_str("on-off-ambient")
         );
+        assert_eq!(
+            Ok(OffOnAmbient),
+            ButtonControlSet::from_str("off-on-ambient")
+        );
+
+        assert_eq!(Ok(OnOff), ButtonControlSet::from_str("ON-OFF"));
+        assert!(ButtonControlSet::from_str("banana").is_err());
     }
 }

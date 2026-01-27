@@ -4,7 +4,7 @@ use crate::device::{
 };
 use argh::FromArgs;
 use std::env;
-use std::io::stdin;
+use std::io::{stdin, stdout, Write};
 use std::str::FromStr;
 
 mod bluetooth;
@@ -27,7 +27,7 @@ struct Args {
         description = "set prompt volume [0-15]",
         arg_name = "0-15"
     )]
-    prompt_volume: Option<u8>,
+    prompt_vol: Option<u8>,
 
     #[argh(
         option,
@@ -51,7 +51,7 @@ struct Args {
         description = "set noise cancellation mode [on|off|ambient[-<volume>]]",
         arg_name = "on|off|ambient[-<volume>]"
     )]
-    noise_cancel: Option<String>,
+    denoise: Option<String>,
 
     #[argh(
         option,
@@ -67,7 +67,7 @@ struct Args {
         description = "set device round button noise cancellation control set [on-off|off-on|on-ambient|off-ambient|on-off-ambient|off-on-ambient]",
         arg_name = "on-off|off-on|on-ambient|off-ambient|on-off-ambient|off-on-ambient"
     )]
-    button: Option<String>,
+    button: Option<ButtonControlSet>,
 
     #[argh(switch, short = 'd', description = "disconnect device")]
     disconnect: bool,
@@ -84,135 +84,149 @@ struct Args {
     #[argh(
         switch,
         short = 'y',
-        description = "disable confirmation for unsafe operations"
+        description = "skip confirmation for unsafe operations"
     )]
     no_confirm: bool,
 }
 
 fn main() {
-    let client = EdifierClient::new().unwrap_or_else(|e| {
-        println!("{}", e);
-        std::process::exit(1);
-    });
+    let client = match EdifierClient::new() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            return;
+        }
+    };
 
     /* no args */
     if env::args().count() <= 1 {
-        print_info(client).unwrap();
+        run_safe_action(|| print_info(&client));
         return;
     }
 
     let args: Args = argh::from_env();
 
-    if let Some(option) = args.name {
-        client.set_device_name(option.as_str()).unwrap();
-        println!("Device name set to: {}.", option);
+    if args.info {
+        run_safe_action(|| print_info(&client));
     }
 
-    if let Some(option) = args.prompt_volume {
-        if option > MAX_PROMPT_VOLUME {
-            println!("Prompt volume must be from 0 to {}.", MAX_PROMPT_VOLUME);
-        } else {
-            client.set_prompt_volume(option).unwrap();
-            println!("Prompt volume set to: {}.", option);
-        }
+    if let Some(option) = args.denoise {
+        run_safe_action(|| set_denoise(&client, option));
+    }
+
+    if let Some(option) = args.name {
+        run_safe_action(|| {
+            client
+                .set_device_name(option.as_str())
+                .and_then(|_| Ok(println!("Device name set to: {option}.")))
+        });
+    }
+
+    if let Some(option) = args.prompt_vol {
+        run_safe_action(|| {
+            client
+                .set_prompt_volume(option)
+                .and_then(|_| Ok(println!("Prompt volume set to: {option}.")))
+        });
     }
 
     if let Some(option) = args.game {
-        client.set_game_mode(option).unwrap();
-        println!("Game mode set to: {}.", option);
-    }
-
-    if let Some(option) = args.noise_cancel {
-        let split: Vec<&str> = option.split('-').collect();
-        let mode = NoiseCancellationMode::from_str(split[0]).unwrap();
-        if split.len() == 1 {
-            client.set_noise_mode(mode, None).unwrap();
-            println!("Noise cancellation mode set to: {}.", mode);
-        } else if split.len() == 2 && mode == NoiseCancellationMode::Ambient {
-            let volume: u8 = split[1].parse().unwrap();
-            if volume > MAX_AMBIENT_VOLUME {
-                println!("Ambient volume must be from 0 to {}.", MAX_AMBIENT_VOLUME);
-            } else {
-                client.set_noise_mode(mode, Some(volume)).unwrap();
-                println!(
-                    "Noise cancellation mode set to: {} (volume {}).",
-                    mode, volume
-                );
-            }
-        } else {
-            println!("Invalid noise cancellation mode value: {}.", option);
-        }
+        run_safe_action(|| {
+            client
+                .set_game_mode(option)
+                .and_then(|_| Ok(println!("Game mode set to: {option}.")))
+        })
     }
 
     if let Some(option) = args.equalizer {
-        client.set_equalizer_preset(option).unwrap();
-        println!("Equalizer set to: {}.", option);
+        run_safe_action(|| {
+            client
+                .set_equalizer_preset(option)
+                .and_then(|_| Ok(println!("Equalizer set to: {option}.")))
+        });
     }
 
     if let Some(option) = args.button {
-        let value = ButtonControlSet::from_arg(option.as_str()).unwrap();
-        client.set_button_control_set(value).unwrap();
-        println!("Button actions set to: [{}].", value);
+        run_safe_action(|| {
+            client
+                .set_button_control_set(option)
+                .and_then(|_| Ok(println!("Button actions set to: {option}.")))
+        });
     }
 
     /* Unsafe actions */
 
-    let do_unsafe_action = |action: &dyn Fn()| {
-        if args.no_confirm || confirm_disconnect() {
-            action();
-        } else {
-            println!("Operation cancelled.");
-        }
-    };
+    if let Some(option) = args.ldac {
+        run_unsafe_action(args.no_confirm, || {
+            client
+                .set_ldac_mode(option)
+                .and_then(|_| Ok(println!("LDAC mode set to: {}.", option)))
+        })
+    }
 
     if args.disconnect {
-        do_unsafe_action(&|| {
-            client.disconnect_bluetooth().unwrap();
-            println!("Device disconnected.");
+        run_unsafe_action(args.no_confirm, || {
+            client
+                .disconnect_bluetooth()
+                .and_then(|_| Ok(println!("Device disconnected.")))
         })
     };
 
     if args.re_pair {
-        do_unsafe_action(&|| {
-            client.re_pair().unwrap();
-            println!("Re-pairing device.");
+        run_unsafe_action(args.no_confirm, || {
+            client
+                .re_pair()
+                .and_then(|_| Ok(println!("Device re-paired.")))
         })
     }
 
     if args.power_off {
-        do_unsafe_action(&|| {
-            client.power_off().unwrap();
-            println!("Device powered off.");
+        run_unsafe_action(args.no_confirm, || {
+            client
+                .power_off()
+                .and_then(|_| Ok(println!("Device powered off.")))
         })
     }
 
     if args.reset {
-        do_unsafe_action(&|| {
-            client.reset_factory_defaults().unwrap();
-            println!("Device settings reset to factory defaults.");
+        run_unsafe_action(args.no_confirm, || {
+            client
+                .reset_factory_defaults()
+                .and_then(|_| Ok(println!("Device settings reset to factory defaults.")))
         })
     }
+}
 
-    if let Some(option) = args.ldac {
-        do_unsafe_action(&|| {
-            client.set_ldac_mode(option).unwrap();
-            println!("LDAC mode set to: {}.", option);
-        })
-    }
+fn run_safe_action<F>(action: F)
+where
+    F: FnOnce() -> Result<(), String>,
+{
+    action().unwrap_or_else(|e| eprintln!("{e}"));
+}
 
-    if args.info {
-        print_info(client).unwrap()
+fn run_unsafe_action<F>(skip_confirmation: bool, action: F)
+where
+    F: FnOnce() -> Result<(), String>,
+{
+    if skip_confirmation || confirm_disconnect() {
+        action().unwrap_or_else(|e| eprintln!("{e}"));
+    } else {
+        println!("Operation cancelled.");
     }
 }
 
 fn confirm_disconnect() -> bool {
-    println!("The device will be disconnected. Continue? (y/n)");
+    print!("The device will be disconnected. Continue? (y/n): ");
+    stdout().flush().ok();
+
     let mut buffer = String::new();
-    stdin().read_line(&mut buffer).unwrap();
-    buffer.to_ascii_lowercase().trim() == "y"
+    if stdin().read_line(&mut buffer).is_err() {
+        return false;
+    }
+    buffer.trim().eq_ignore_ascii_case("y")
 }
 
-fn print_info(client: EdifierClient) -> Result<(), String> {
+fn print_info(client: &EdifierClient) -> Result<(), String> {
     println!("Device name: {}", client.get_device_name()?);
     println!("LDAC mode: {}", client.get_ldac_mode()?);
     println!("Battery level: {}%", client.get_battery_level()?);
@@ -229,13 +243,39 @@ fn print_info(client: EdifierClient) -> Result<(), String> {
     );
     println!(
         "Control button actions: [{}]",
-        client.get_button_control_set()?.to_arg()
+        client.get_button_control_set()?.to_string()
     );
     println!("Game mode: {}", client.get_game_mode()?);
     println!("Equalizer preset: {}", client.get_equalizer_preset()?);
     println!("Mac address: {}", client.get_mac_address()?);
     println!("Firmware version: {}", client.get_firmware_version()?);
     println!("Fingerprint: {}", client.get_fingerprint()?);
+
+    Ok(())
+}
+
+fn set_denoise(client: &EdifierClient, option: String) -> Result<(), String> {
+    let split: Vec<&str> = option.split('-').collect();
+    let mode = NoiseCancellationMode::from_str(split[0])
+        .map_err(|_| format!("Invalid noise cancellation mode value: `{option}`."))?;
+
+    if split.len() == 1 {
+        client.set_noise_mode(mode, None)?;
+        println!("Noise cancellation mode set to: {mode}.");
+    } else if split.len() == 2 && mode == NoiseCancellationMode::Ambient {
+        let volume: u8 = split[1]
+            .parse()
+            .map_err(|_| format!("Invalid ambient volume value: `{option}`."))?;
+
+        if volume > MAX_AMBIENT_VOLUME {
+            return err!("Ambient volume must be from 0 to {MAX_AMBIENT_VOLUME}.");
+        } else {
+            client.set_noise_mode(mode, Some(volume))?;
+            println!("Noise cancellation mode set to: {mode} (volume {volume}).");
+        }
+    } else {
+        return err!("Invalid noise cancellation mode value: {option}.");
+    }
 
     Ok(())
 }

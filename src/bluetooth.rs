@@ -9,10 +9,10 @@ use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE};
 use windows::Win32::Networking::WinSock;
 use windows::Win32::Networking::WinSock::{
     WSACleanup, WSAGetLastError, WSAStartup, INVALID_SOCKET, SEND_RECV_FLAGS, SOCKADDR, SOCKET,
-    SOCKET_ERROR, SOCK_STREAM, WSADATA, WSAETIMEDOUT, WSA_ERROR,
+    SOCKET_ERROR, SOCK_STREAM, WSADATA, WSAETIMEDOUT,
 };
 use windows_core::GUID;
-
+use crate::err;
 #[cfg(feature = "debug")]
 use crate::utils::join_hex;
 
@@ -21,13 +21,13 @@ pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
         let mut wsa_data: WSADATA = zeroed();
         let startup_result = WSAStartup(0x202, &mut wsa_data); /* 0x202 = MAKEWORD(2,2) */
         if startup_result != 0 {
-            return Err(format!("WSAStartup failed: ERROR ({}).", startup_result));
+            return err!("WSAStartup failed: ERROR ({startup_result}).");
         }
 
         let socket = WinSock::socket(AF_BTH as i32, SOCK_STREAM, BTHPROTO_RFCOMM as i32)
             .map_err(|e| e.to_string())?;
         if socket == INVALID_SOCKET {
-            return Err("Invalid socket.".to_string());
+            return err!("Invalid socket.");
         }
 
         let mut address: SOCKADDR_BTH = zeroed();
@@ -43,9 +43,9 @@ pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
         if connect_result == SOCKET_ERROR {
             let error = WSAGetLastError();
             return if error == WSAETIMEDOUT {
-                Err("Unable to connect to device.".to_string())
+                err!("Unable to connect to device.")
             } else {
-                Err(wsa_error_message("Failed to connect to device", error))
+                err!("Failed to connect to device: {error:?}.")
             };
         }
 
@@ -67,13 +67,15 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
     let result = unsafe {
         let bytes_sent = WinSock::send(socket, data, SEND_RECV_FLAGS(0));
         if bytes_sent == SOCKET_ERROR {
-            return Err(wsa_error_message("Write error", WSAGetLastError()));
+            let error = WSAGetLastError();
+            return err!("Write error: {error:?}.", );
         }
 
         let mut buffer = [0u8; 256];
         let bytes_read = WinSock::recv(socket, &mut buffer, SEND_RECV_FLAGS(0));
         if bytes_read == SOCKET_ERROR {
-            return Err(wsa_error_message("Read error", WSAGetLastError()));
+            let error = WSAGetLastError();
+            return err!("Read error: {error:?}.");
         }
 
         buffer[..bytes_read as usize].to_vec()
@@ -97,7 +99,7 @@ fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
         let find_radio_handle = BluetoothFindFirstRadio(&find_radio_params, &mut radio_handle)
             .map_err(|e| e.to_string())?;
         if find_radio_handle.is_invalid() {
-            return Err("No bluetooth radio.".to_string());
+            return err!("No bluetooth radio.");
         }
 
         let device_search_params = BLUETOOTH_DEVICE_SEARCH_PARAMS {
@@ -141,7 +143,7 @@ fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
         BluetoothFindRadioClose(find_radio_handle).map_err(|e| e.to_string())?;
     }
 
-    Err("No devices found.".into())
+    err!("No devices found.")
 }
 
 fn has_spp_service(
@@ -166,8 +168,4 @@ fn has_spp_service(
             false
         }
     }
-}
-
-fn wsa_error_message(message: &str, error: WSA_ERROR) -> String {
-    format!("{}: {:?}.", message, error)
 }
