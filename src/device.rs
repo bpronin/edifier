@@ -351,26 +351,26 @@ impl FromStr for DenoiseMode {
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
 pub enum ButtonControlSet {
-    #[strum(serialize = "default")]
+    #[strum(serialize = "Default")]
     #[strum(serialize = "0")]
     Default = 0x00,
-    #[strum(serialize = "off-on")]
+    #[strum(serialize = "Off-On")]
     #[strum(serialize = "1")]
     OffOn = 0x01,
-    #[strum(serialize = "on-off")]
+    #[strum(serialize = "On-Off")]
     #[strum(serialize = "2")]
     OnOff = 0x03,
-    #[strum(serialize = "off-ambient")]
+    #[strum(serialize = "Off-Ambient")]
     #[strum(serialize = "3")]
     OffAmbient = 0x04,
-    #[strum(serialize = "on-ambient")]
+    #[strum(serialize = "On-Ambient")]
     #[strum(serialize = "4")]
     OnAmbient = 0x06,
-    #[strum(serialize = "on-off-ambient")]
-    #[strum(serialize = "5")]
-    OnOffAmbient = 0x07,
+    #[strum(serialize = "On-Off-Ambient")]
     #[strum(serialize = "6")]
-    #[strum(serialize = "off-on-ambient")]
+    OnOffAmbient = 0x07,
+    #[strum(serialize = "5")]
+    #[strum(serialize = "Off-On-Ambient")]
     OffOnAmbient = 0x08,
 }
 
