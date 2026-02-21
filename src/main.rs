@@ -63,8 +63,9 @@ struct Args {
     #[argh(
         option,
         short = 'b',
-        description = "set device round button noise cancellation control set [on-off|off-on|on-ambient|off-ambient|on-off-ambient|off-on-ambient]",
-        arg_name = "on-off|off-on|on-ambient|off-ambient|on-off-ambient|off-on-ambient"
+        description = "set device round button noise cancellation control set [off-on (1)|on-off (2)|\
+        off-ambient (3)|on-ambient (4)|off-on-ambient (5)|on-off-ambient (6)]",
+        arg_name = "off-on (1)|on-off (2)|off-ambient (3)|on-ambient (4)|off-on-ambient (5)|on-off-ambient (6)"
     )]
     button: Option<ButtonControlSet>,
 
