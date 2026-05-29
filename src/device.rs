@@ -49,7 +49,7 @@ pub struct EdifierClient {
 impl EdifierClient {
     pub(crate) fn new() -> Result<EdifierClient, String> {
         Ok(Self {
-            socket: bluetooth::connect(SPP_UUID)?,
+            socket: bluetooth::connect(&SPP_UUID)?,
         })
     }
 
@@ -236,6 +236,8 @@ impl Drop for EdifierClient {
         bluetooth::disconnect(self.socket);
     }
 }
+
+/*
 #[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]
 #[strum(ascii_case_insensitive)]
@@ -243,6 +245,7 @@ pub enum PlaybackStatus {
     Stopped = 0x03,
     Playing = 0x0D,
 }
+*/
 
 #[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
 #[repr(u8)]

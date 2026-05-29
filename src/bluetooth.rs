@@ -1,9 +1,13 @@
-﻿use std::mem::zeroed;
+﻿use crate::err;
+#[cfg(feature = "debug")]
+use crate::utils::join_hex;
+use std::mem::zeroed;
 use windows::Win32::Devices::Bluetooth::{
-    BluetoothEnumerateInstalledServices, BluetoothFindDeviceClose, BluetoothFindFirstDevice, BluetoothFindFirstRadio,
-    BluetoothFindNextDevice, BluetoothFindNextRadio, BluetoothFindRadioClose,
-    AF_BTH, BLUETOOTH_DEVICE_INFO, BLUETOOTH_DEVICE_SEARCH_PARAMS,
-    BLUETOOTH_FIND_RADIO_PARAMS, BTHPROTO_RFCOMM, SOCKADDR_BTH,
+    BluetoothEnumerateInstalledServices, BluetoothFindDeviceClose, BluetoothFindFirstDevice, BluetoothFindFirstRadio
+    , BluetoothFindNextDevice,
+    BluetoothFindNextRadio, BluetoothFindRadioClose, AF_BTH,
+    BLUETOOTH_DEVICE_INFO, BLUETOOTH_DEVICE_SEARCH_PARAMS, BLUETOOTH_FIND_RADIO_PARAMS,
+    BTHPROTO_RFCOMM, SOCKADDR_BTH,
 };
 use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE};
 use windows::Win32::Networking::WinSock;
@@ -12,11 +16,8 @@ use windows::Win32::Networking::WinSock::{
     SOCKET_ERROR, SOCK_STREAM, WSADATA, WSAETIMEDOUT,
 };
 use windows_core::GUID;
-use crate::err;
-#[cfg(feature = "debug")]
-use crate::utils::join_hex;
 
-pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
+pub(crate) fn connect(service: &GUID) -> Result<SOCKET, String> {
     unsafe {
         let mut wsa_data: WSADATA = zeroed();
         let startup_result = WSAStartup(0x202, &mut wsa_data); /* 0x202 = MAKEWORD(2,2) */
@@ -32,8 +33,8 @@ pub(crate) fn connect(spp_uuid: GUID) -> Result<SOCKET, String> {
 
         let mut address: SOCKADDR_BTH = zeroed();
         address.addressFamily = AF_BTH;
-        address.btAddr = find_device_address(spp_uuid)?;
-        address.serviceClassId = spp_uuid;
+        address.btAddr = find_device_address(service)?;
+        address.serviceClassId = *service;
 
         let connect_result = WinSock::connect(
             socket,
@@ -68,7 +69,7 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
         let bytes_sent = WinSock::send(socket, data, SEND_RECV_FLAGS(0));
         if bytes_sent == SOCKET_ERROR {
             let error = WSAGetLastError();
-            return err!("Write error: {error:?}.", );
+            return err!("Write error: {error:?}.",);
         }
 
         let mut buffer = [0u8; 256];
@@ -87,19 +88,44 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
     Ok(result)
 }
 
+fn has_spp_service(
+    radio_handle: HANDLE,
+    device_info: &BLUETOOTH_DEVICE_INFO,
+    spp_guid: &GUID,
+) -> bool {
+    let mut guids = [GUID::default(); 10];
+    let mut guids_count = guids.len() as u32;
+
+    unsafe {
+        let result = BluetoothEnumerateInstalledServices(
+            radio_handle.into(),
+            device_info,
+            &mut guids_count,
+            guids.as_mut_ptr().into(),
+        );
+
+        if result == ERROR_SUCCESS.0 {
+            guids[..guids_count as usize].iter().any(|g| g == spp_guid)
+        } else {
+            false
+        }
+    }
+}
+
 ///
 /// Looks for the first device providing service with specified SPP UUID.
 ///
-fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
+fn find_device(spp_guid: &GUID) -> Result<BLUETOOTH_DEVICE_INFO, String> {
+    let find_radio_params = BLUETOOTH_FIND_RADIO_PARAMS {
+        dwSize: size_of::<BLUETOOTH_FIND_RADIO_PARAMS>() as u32,
+    };
+    let mut radio_handle = HANDLE::default();
+
     unsafe {
-        let find_radio_params = BLUETOOTH_FIND_RADIO_PARAMS {
-            dwSize: size_of::<BLUETOOTH_FIND_RADIO_PARAMS>() as u32,
-        };
-        let mut radio_handle = HANDLE::default();
         let find_radio_handle = BluetoothFindFirstRadio(&find_radio_params, &mut radio_handle)
             .map_err(|e| e.to_string())?;
         if find_radio_handle.is_invalid() {
-            return err!("No bluetooth radio.");
+            return err!("No Bluetooth radio.");
         }
 
         let device_search_params = BLUETOOTH_DEVICE_SEARCH_PARAMS {
@@ -126,7 +152,7 @@ fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
             if !find_device_handle.is_invalid() {
                 'devices: loop {
                     if has_spp_service(radio_handle, &mut device_info, spp_guid) {
-                        return Ok(device_info.Address.Anonymous.ullLong);
+                        return Ok(device_info);
                     }
                     if BluetoothFindNextDevice(find_device_handle, &mut device_info).is_err() {
                         break 'devices;
@@ -146,26 +172,81 @@ fn find_device_address(spp_guid: GUID) -> Result<u64, String> {
     err!("No devices found.")
 }
 
-fn has_spp_service(
-    radio_handle: HANDLE,
-    device_info: &BLUETOOTH_DEVICE_INFO,
-    spp_guid: GUID,
-) -> bool {
-    let mut guids = [GUID::default(); 10];
-    let mut guids_count = guids.len() as u32;
-
-    unsafe {
-        let result = BluetoothEnumerateInstalledServices(
-            radio_handle.into(),
-            device_info,
-            &mut guids_count,
-            guids.as_mut_ptr().into(),
-        );
-
-        if result == ERROR_SUCCESS.0 {
-            guids[..guids_count as usize].iter().any(|g| *g == spp_guid)
-        } else {
-            false
-        }
-    }
+fn find_device_address(spp_guid: &GUID) -> Result<u64, String> {
+    find_device(spp_guid).map(|info| unsafe { info.Address.Anonymous.ullLong })
 }
+
+// fn find_device_name(spp_guid: &GUID) -> Result<String, String> {
+//     find_device(spp_guid).map(|info| unsafe { PCWSTR(info.szName.as_ptr()).to_string().unwrap() })
+// }
+
+// fn with_bt_device<F, R>(spp_guid: &GUID, action: F) -> Result<R, String>
+// where
+//     F: FnOnce(HANDLE, &BLUETOOTH_DEVICE_INFO, &GUID) -> Result<R, String>,
+// {
+//     let find_radio_params = BLUETOOTH_FIND_RADIO_PARAMS {
+//         dwSize: size_of::<BLUETOOTH_FIND_RADIO_PARAMS>() as u32,
+//     };
+//     let mut radio = HANDLE::default();
+//
+//     unsafe {
+//         let find_radio_handle =
+//             BluetoothFindFirstRadio(&find_radio_params, &mut radio).map_err(|e| e.to_string())?;
+//         if find_radio_handle.is_invalid() {
+//             return err!("No Bluetooth radio.");
+//         }
+//
+//         let device_search_params = BLUETOOTH_DEVICE_SEARCH_PARAMS {
+//             dwSize: size_of::<BLUETOOTH_DEVICE_SEARCH_PARAMS>() as u32,
+//             fReturnAuthenticated: true.into(),
+//             fReturnRemembered: true.into(),
+//             fReturnUnknown: true.into(),
+//             fReturnConnected: true.into(),
+//             fIssueInquiry: false.into(),
+//             cTimeoutMultiplier: 2,
+//             hRadio: radio,
+//         };
+//
+//         'radios: loop {
+//             let mut device_info = BLUETOOTH_DEVICE_INFO {
+//                 dwSize: size_of::<BLUETOOTH_DEVICE_INFO>() as u32,
+//                 ..Default::default()
+//             };
+//
+//             let find_device_handle =
+//                 BluetoothFindFirstDevice(&device_search_params, &mut device_info)
+//                     .map_err(|e| e.to_string())?;
+//
+//             if !find_device_handle.is_invalid() {
+//                 'devices: loop {
+//                     return action(radio, &device_info, spp_guid);
+//                     if BluetoothFindNextDevice(find_device_handle, &mut device_info).is_err() {
+//                         break 'devices;
+//                     }
+//                 }
+//                 BluetoothFindDeviceClose(find_device_handle).map_err(|e| e.to_string())?;
+//             }
+//
+//             if BluetoothFindNextRadio(find_radio_handle, &mut radio).is_err() {
+//                 break 'radios;
+//             }
+//         }
+//
+//         BluetoothFindRadioClose(find_radio_handle).map_err(|e| e.to_string())?;
+//     }
+//
+//     err!("No devices found.")
+// }
+//
+// #[cfg(test)]
+// mod test {
+//     use super::*;
+//
+//     #[test]
+//     fn list_devices() {
+//         let guid = GUID::from_u128(0xEDF00000_EDFE_DFED_FEDF_EDFEDFEDFEDF);
+//         println!("Name: {:?}", find_device_name(&guid).unwrap());
+//         println!("Address: {:?}", find_device_address(&guid).unwrap())
+//         // println!("{:?}", connect(&guid));
+//     }
+// }
