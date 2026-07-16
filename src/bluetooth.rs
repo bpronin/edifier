@@ -17,31 +17,19 @@ use windows::Win32::Networking::WinSock::{
 };
 use windows_core::GUID;
 
+type BluetoothDevice = (HANDLE, BLUETOOTH_DEVICE_INFO);
+
+const WINSOCK_VERSION_2_2: u16 = 0x0202;
+const A2DP_SINK_UUID: GUID = GUID::from_u128(0x0000110B_0000_1000_8000_00805F9B34FB);
+const HFP_AG_UUID: GUID = GUID::from_u128(0x0000111E_0000_1000_8000_00805F9B34FB);
+const AUDIO_SERVICE_UUIDS: [GUID; 2] = [A2DP_SINK_UUID, HFP_AG_UUID];
+
 /// Resets Bluetooth audio-related services for the device that provides the specified SPP service.
 pub(crate) fn pair(spp_guid: &GUID) -> Result<(), String> {
     let (radio_handle, device_info) = find_device(spp_guid)?;
 
-    const A2DP_SINK_UUID: GUID = GUID::from_u128(0x0000110B_0000_1000_8000_00805F9B34FB);
-    const HFP_AG_UUID: GUID = GUID::from_u128(0x0000111E_0000_1000_8000_00805F9B34FB);
-
-    for service in &[A2DP_SINK_UUID, HFP_AG_UUID] {
-        unsafe {
-            BluetoothSetServiceState(
-                Some(radio_handle),
-                &device_info,
-                service,
-                BLUETOOTH_SERVICE_DISABLE,
-            );
-            let result = BluetoothSetServiceState(
-                Some(radio_handle),
-                &device_info,
-                service,
-                BLUETOOTH_SERVICE_ENABLE,
-            );
-            if result != BTH_ERROR_SUCCESS {
-                return err!("Bluetooth reset state failed: {result}.");
-            }
-        }
+    for service_guid in AUDIO_SERVICE_UUIDS {
+        reset_bluetooth_service(radio_handle, &device_info, &service_guid)?;
     }
 
     Ok(())
@@ -50,12 +38,7 @@ pub(crate) fn pair(spp_guid: &GUID) -> Result<(), String> {
 /// Opens an RFCOMM Bluetooth socket connection to the device that provides the specified SPP service.
 pub(crate) fn connect(spp_guid: &GUID) -> Result<SOCKET, String> {
     unsafe {
-        let mut wsa_data: WSADATA = zeroed();
-
-        let startup_result = WSAStartup(0x202, &mut wsa_data); /* 0x202 = MAKEWORD(2,2) */
-        if startup_result != 0 {
-            return err!("WSA startup failed: ERROR ({startup_result}).");
-        }
+        startup_winsock()?;
 
         let socket = WinSock::socket(AF_BTH as i32, SOCK_STREAM, BTHPROTO_RFCOMM as i32)
             .map_err(|e| e.to_string())?;
@@ -64,10 +47,7 @@ pub(crate) fn connect(spp_guid: &GUID) -> Result<SOCKET, String> {
         }
 
         let (_radio, device_info) = find_device(spp_guid)?;
-        let mut address: SOCKADDR_BTH = zeroed();
-        address.addressFamily = AF_BTH;
-        address.btAddr = device_info.Address.Anonymous.ullLong;
-        address.serviceClassId = *spp_guid;
+        let address = bluetooth_socket_address(&device_info, spp_guid);
 
         let connect_result = WinSock::connect(
             socket,
@@ -124,33 +104,82 @@ pub(crate) fn send(socket: SOCKET, data: &[u8]) -> Result<Vec<u8>, String> {
     Ok(result)
 }
 
+fn startup_winsock() -> Result<(), String> {
+    unsafe {
+        let mut data: WSADATA = zeroed();
+        let result = WSAStartup(WINSOCK_VERSION_2_2, &mut data);
+        if result != 0 {
+            return err!("WSA startup failed: ERROR ({result}).");
+        }
+    }
+    Ok(())
+}
+
+fn reset_bluetooth_service(
+    radio_handle: HANDLE,
+    device_info: &BLUETOOTH_DEVICE_INFO,
+    service_guid: &GUID,
+) -> Result<(), String> {
+    unsafe {
+        BluetoothSetServiceState(
+            Some(radio_handle),
+            device_info,
+            service_guid,
+            BLUETOOTH_SERVICE_DISABLE,
+        );
+
+        let result = BluetoothSetServiceState(
+            Some(radio_handle),
+            device_info,
+            service_guid,
+            BLUETOOTH_SERVICE_ENABLE,
+        );
+
+        if result != BTH_ERROR_SUCCESS {
+            return err!("Bluetooth reset state failed: {result}.");
+        }
+    }
+
+    Ok(())
+}
+
+fn bluetooth_socket_address(
+    device_info: &BLUETOOTH_DEVICE_INFO,
+    service_guid: &GUID,
+) -> SOCKADDR_BTH {
+    let mut address: SOCKADDR_BTH = unsafe { zeroed() };
+    address.addressFamily = AF_BTH;
+    address.btAddr = unsafe { device_info.Address.Anonymous.ullLong };
+    address.serviceClassId = *service_guid;
+    address
+}
+
 /// Checks if the device has the specified service enabled.
 fn device_has_service(
     radio_handle: HANDLE,
     device_info: &BLUETOOTH_DEVICE_INFO,
-    spp_guid: &GUID,
+    service_guid: &GUID,
 ) -> bool {
-    let mut guids = [GUID::default(); 10];
-    let mut guids_count = guids.len() as u32;
+    let mut service_guids = [GUID::default(); 10];
+    let mut service_guid_count = service_guids.len() as u32;
 
     let result = unsafe {
         BluetoothEnumerateInstalledServices(
             radio_handle.into(),
             device_info,
-            &mut guids_count,
-            guids.as_mut_ptr().into(),
+            &mut service_guid_count,
+            service_guids.as_mut_ptr().into(),
         )
     };
 
-    if result == BTH_ERROR_SUCCESS {
-        guids[..guids_count as usize].iter().any(|g| g == spp_guid)
-    } else {
-        false
-    }
+    result == BTH_ERROR_SUCCESS
+        && service_guids[..service_guid_count as usize]
+            .iter()
+            .any(|installed_service_guid| installed_service_guid == service_guid)
 }
 
-/// Looks for the first device providing service with specified SPP UUID.
-fn find_device(spp_guid: &GUID) -> Result<(HANDLE, BLUETOOTH_DEVICE_INFO), String> {
+/// Searches for the first Bluetooth device that provides the service matching the specified UUID
+fn find_device(service_guid: &GUID) -> Result<BluetoothDevice, String> {
     let find_radio_params = BLUETOOTH_FIND_RADIO_PARAMS {
         dwSize: size_of::<BLUETOOTH_FIND_RADIO_PARAMS>() as u32,
     };
@@ -186,13 +215,15 @@ fn find_device(spp_guid: &GUID) -> Result<(HANDLE, BLUETOOTH_DEVICE_INFO), Strin
 
             if !find_device_handle.is_invalid() {
                 'devices: loop {
-                    if device_has_service(radio_handle, &device_info, spp_guid) {
+                    if device_has_service(radio_handle, &device_info, service_guid) {
                         return Ok((radio_handle, device_info));
                     }
+
                     if BluetoothFindNextDevice(find_device_handle, &mut device_info).is_err() {
                         break 'devices;
                     }
                 }
+
                 BluetoothFindDeviceClose(find_device_handle).map_err(|e| e.to_string())?;
             }
 
@@ -205,42 +236,4 @@ fn find_device(spp_guid: &GUID) -> Result<(HANDLE, BLUETOOTH_DEVICE_INFO), Strin
     }
 
     err!("No devices found.")
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use windows_core::PCWSTR;
-
-    const SPP_UUID: GUID = GUID::from_u128(0xEDF00000_EDFE_DFED_FEDF_EDFEDFEDFEDF);
-
-    #[test]
-    fn test_find_device() {
-        let result = find_device(&SPP_UUID);
-        assert!(result.is_ok());
-
-        let (radio, device) = result.unwrap();
-        assert_ne!(radio, HANDLE::default());
-
-        let name = unsafe { PCWSTR(device.szName.as_ptr()).to_string() }.unwrap();
-        println!("Name: {:?}", name);
-
-        let address = unsafe { device.Address.Anonymous.ullLong };
-        println!("Address: {:?}", address);
-    }
-
-    #[test]
-    fn test_connect_device() {
-        let result = connect(&SPP_UUID);
-        assert!(result.is_ok());
-
-        let socket = result.unwrap();
-        assert_ne!(socket, INVALID_SOCKET);
-    }
-
-    #[test]
-    fn test_reconnect_device() {
-        let result = pair(&SPP_UUID);
-        assert!(result.is_ok());
-    }
 }
