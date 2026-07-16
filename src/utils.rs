@@ -1,9 +1,11 @@
 ﻿use std::fmt::Write;
 
+/// Splits a 16-bit value into two big-endian bytes.
 pub(crate) fn split_into_bytes(value: u16) -> [u8; 2] {
     [(value >> 8) as u8, (value & 0xFF) as u8]
 }
 
+/// Joins bytes as uppercase hexadecimal strings separated by the given delimiter.
 pub(crate) fn join_hex<T: AsRef<[u8]>>(data: T, delimiter: &str) -> String {
     let bytes = data.as_ref();
     let mut result = String::with_capacity(bytes.len() * (2 + delimiter.len()));
@@ -16,6 +18,7 @@ pub(crate) fn join_hex<T: AsRef<[u8]>>(data: T, delimiter: &str) -> String {
     result
 }
 
+/// Joins bytes as uppercase hexadecimal strings separated by the given delimiter.
 pub(crate) fn join_str<E: ToString, T: AsRef<[E]>>(data: T, delimiter: &str) -> String {
     let bytes = data.as_ref();
     let mut result = String::with_capacity(bytes.len() * (2 + delimiter.len()));

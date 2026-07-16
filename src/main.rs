@@ -63,7 +63,7 @@ struct Args {
     #[argh(
         option,
         short = 'b',
-        description = "set device round button noise cancellation control set [off-on (1)|on-off (2)|\
+        description = "set device round button noise cancellation controls sequence [off-on (1)|on-off (2)|\
         off-ambient (3)|on-ambient (4)|off-on-ambient (5)|on-off-ambient (6)]",
         arg_name = "off-on (1)|on-off (2)|off-ambient (3)|on-ambient (4)|off-on-ambient (5)|on-off-ambient (6)"
     )]
@@ -72,11 +72,14 @@ struct Args {
     #[argh(switch, short = 'd', description = "disconnect device")]
     disconnect: bool,
 
-    #[argh(switch, short = 'p', description = "power off device")]
+    #[argh(switch, short = 'o', description = "power off device")]
     power_off: bool,
 
-    #[argh(switch, short = 'x', description = "re-pair device")]
-    re_pair: bool,
+    #[argh(switch, short = 'u', description = "unpair device")]
+    unpair: bool,
+
+    #[argh(switch, short = 'p', description = "pair device")]
+    pair: bool,
 
     #[argh(switch, short = 'r', description = "reset device to factory defaults")]
     reset: bool,
@@ -100,14 +103,18 @@ fn main() {
 
     /* no args */
     if env::args().count() <= 1 {
-        run_safe_action(|| print_info(&client), "");
+        run_safe_action(|| print_device_info(&client), "");
         return;
     }
 
     let args: Args = argh::from_env();
 
     if args.info {
-        run_safe_action(|| print_info(&client), "");
+        run_safe_action(|| print_device_info(&client), "");
+    }
+
+    if args.pair {
+        run_safe_action(|| EdifierClient::pair(), "Pairing successful.");
     }
 
     if let Some(option) = args.denoise {
@@ -152,41 +159,41 @@ fn main() {
         );
     }
 
-    /* Actions that require device disconnection. */
+    /* Actions requiring device disconnection. */
 
     if let Some(option) = args.ldac {
         run_unsafe_action(
-            args.no_confirm,
             || client.set_ldac_mode(option),
             &format!("LDAC mode set to: {option}."),
+            args.no_confirm,
         )
     }
 
     if args.disconnect {
         run_unsafe_action(
-            args.no_confirm,
             || client.disconnect_bluetooth(),
             "Device disconnected.",
+            args.no_confirm,
         )
     };
 
-    if args.re_pair {
-        run_unsafe_action(args.no_confirm, || client.re_pair(), "Device re-paired.")
+    if args.unpair {
+        run_unsafe_action(|| client.unpair(), "Device unpaired.", args.no_confirm)
     }
 
     if args.power_off {
         run_unsafe_action(
-            args.no_confirm,
             || client.power_off(),
             "Device powered off.",
+            args.no_confirm,
         )
     }
 
     if args.reset {
         run_unsafe_action(
-            args.no_confirm,
             || client.reset_factory_defaults(),
             "Device settings reset to factory defaults.",
+            args.no_confirm,
         )
     }
 }
@@ -200,15 +207,16 @@ where
         .unwrap_or_else(|e| eprintln!("{e}"));
 }
 
-fn run_unsafe_action<F>(skip_confirmation: bool, action: F, success_message: &str)
+fn run_unsafe_action<F>(action: F, success_message: &str, skip_confirmation: bool)
 where
     F: FnOnce() -> Result<(), String>,
 {
-    if skip_confirmation || confirm_disconnect() {
-        run_safe_action(action, success_message);
-    } else {
+    if !skip_confirmation && !confirm_disconnect() {
         println!("Operation cancelled.");
+        return;
     }
+
+    run_safe_action(action, success_message);
 }
 
 fn confirm_disconnect() -> bool {
@@ -223,7 +231,7 @@ fn confirm_disconnect() -> bool {
     answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes")
 }
 
-fn print_info(client: &EdifierClient) -> Result<(), String> {
+fn print_device_info(client: &EdifierClient) -> Result<(), String> {
     println!("Device name: {}", client.get_device_name()?);
     println!("LDAC mode: {}", client.get_ldac_mode()?);
     println!("Battery level: {}%", client.get_battery_level()?);

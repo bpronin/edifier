@@ -1,12 +1,16 @@
 ﻿use crate::utils::{join_hex, split_into_bytes};
 use std::fmt::{Display, Formatter, Write};
 
+/// Represents an Edifier protocol message encoded as raw bytes.
 #[derive(Debug, PartialEq, Eq)]
 pub struct EdifierMessage {
     bytes: Vec<u8>,
 }
 
 impl EdifierMessage {
+    
+    /// Builds a new Edifier protocol message with the given command code 
+    /// and optional payload.
     pub(crate) fn new(command_code: u8, payload: Option<&[u8]>) -> Self {
         let length = payload.map_or(0, |p| p.len());
         let mut bytes = vec![0u8; length + 5];
@@ -29,7 +33,8 @@ impl EdifierMessage {
 
         Self { bytes }
     }
-
+    
+    /// Returns the message payload bytes, or `None` when the message has no payload.
     pub(crate) fn payload(&self) -> Option<Vec<u8>> {
         if self.bytes.is_empty() {
             return None;
@@ -65,6 +70,8 @@ impl EdifierMessage {
             ])
         }
     */
+    
+    /// Returns the raw message bytes.
     pub fn as_slice(&self) -> &[u8] {
         self.bytes.as_slice()
     }

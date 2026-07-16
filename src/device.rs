@@ -39,20 +39,29 @@ const CMD_SET_BUTTON_CONTROL_SET: u8 = 0xF1;
 pub(crate) const MAX_PROMPT_VOLUME: u8 = 15;
 pub(crate) const MAX_AMBIENT_VOLUME: u8 = 12;
 
-static SPP_UUID: GUID = GUID::from_u128(0xEDF00000_EDFE_DFED_FEDF_EDFEDFEDFEDF);
+const SPP_UUID: GUID = GUID::from_u128(0xEDF00000_EDFE_DFED_FEDF_EDFEDFEDFEDF);
 
+/// Provides a Bluetooth client for controlling an Edifier device through its SPP service.
 #[derive(Debug)]
 pub struct EdifierClient {
     socket: SOCKET,
 }
 
 impl EdifierClient {
+
+    /// Creates a new Edifier client connected through the device SPP Bluetooth service.
     pub(crate) fn new() -> Result<EdifierClient, String> {
         Ok(Self {
             socket: bluetooth::connect(&SPP_UUID)?,
         })
     }
 
+    /// Resets Bluetooth pairing-related services for the Edifier device.
+    pub(crate) fn pair() -> Result<(), String> {
+        bluetooth::pair(&SPP_UUID)
+    }
+
+    /// Returns the current Bluetooth device name.
     pub(crate) fn get_device_name(&self) -> Result<String, String> {
         let response = self.send(CMD_GET_NAME, None)?;
         let payload = response.payload().unwrap();
@@ -61,12 +70,14 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Sets the Bluetooth device name.
     pub(crate) fn set_device_name(&self, name: &str) -> Result<(), String> {
         self.send(CMD_SET_NAME, name.as_bytes().into())?;
 
         Ok(())
     }
 
+    /// Returns the device MAC address formatted as hexadecimal bytes.
     pub(crate) fn get_mac_address(&self) -> Result<String, String> {
         let response = self.send(CMD_GET_MAC_ADDRESS, None)?;
         let result = join_hex(response.payload().unwrap(), ":");
@@ -74,6 +85,7 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Returns the current battery level percentage reported by the device.
     pub(crate) fn get_battery_level(&self) -> Result<u8, String> {
         let response = self.send(CMD_GET_BATTERY_LEVEL, None)?;
         let result = response.payload().unwrap()[0];
@@ -81,6 +93,7 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Returns the firmware version reported by the device.
     pub(crate) fn get_firmware_version(&self) -> Result<String, String> {
         let response = self.send(CMD_GET_FIRMWARE_VERSION, None)?;
         let result = join_str(response.payload().unwrap(), ".");
@@ -88,6 +101,7 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Returns the device fingerprint formatted as hexadecimal bytes.
     pub(crate) fn get_fingerprint(&self) -> Result<String, String> {
         let response = self.send(CMD_GET_FINGERPRINT, None)?;
         let result = join_hex(response.payload().unwrap(), " ");
@@ -95,6 +109,7 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Returns the current game mode state.
     pub(crate) fn get_game_mode(&self) -> Result<GameMode, String> {
         let response = self.send(CMD_GET_GAME_MODE, None)?;
         let value = response.payload().unwrap()[0];
@@ -103,12 +118,14 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Enables or disables game mode.
     pub(crate) fn set_game_mode(&self, mode: GameMode) -> Result<(), String> {
         self.send(CMD_SET_GAME_MODE, Some(&[mode as u8]))?;
 
         Ok(())
     }
 
+    /// Returns the current LDAC mode.
     pub(crate) fn get_ldac_mode(&self) -> Result<LdacMode, String> {
         let response = self.send(CMD_GET_LDAC_MODE, None)?;
         let value = response.payload().unwrap()[0];
@@ -117,12 +134,14 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Sets the LDAC mode.
     pub(crate) fn set_ldac_mode(&self, mode: LdacMode) -> Result<(), String> {
         self.send(CMD_SET_LDAC_MODE, Some(&[mode as u8]))?;
-
+        // todo: reopen bluetooth socket
         Ok(())
     }
 
+    /// Returns the current noise cancellation mode.
     pub(crate) fn get_denoise_mode(&self) -> Result<DenoiseMode, String> {
         let response = self.send(CMD_GET_NOISE_MODE, None)?;
         let payload = response.payload().unwrap();
@@ -131,6 +150,7 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Sets the noise cancellation mode and optional ambient volume.
     pub(crate) fn set_denoise_mode(&self, mode: DenoiseMode) -> Result<(), String> {
         let payload = match mode {
             Ambient(volume) => match volume {
@@ -145,6 +165,7 @@ impl EdifierClient {
         Ok(())
     }
 
+    /// Returns the current equalizer preset.
     pub(crate) fn get_equalizer_preset(&self) -> Result<EqualizerPreset, String> {
         let response = self.send(CMD_GET_EQUALIZER_PRESET, None)?;
         let value = response.payload().unwrap()[0];
@@ -153,12 +174,14 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Sets the equalizer preset.
     pub(crate) fn set_equalizer_preset(&self, preset: EqualizerPreset) -> Result<(), String> {
         self.send(CMD_SET_EQUALIZER_PRESET, Some(&[preset as u8]))?;
 
         Ok(())
     }
 
+    /// Returns the configured button control set.
     pub(crate) fn get_button_control_set(&self) -> Result<ButtonControlSet, String> {
         let response = self.send(CMD_GET_BUTTON_CONTROL_SET, Some(&[0x0A]))?;
         let value = response.payload().unwrap()[1];
@@ -167,12 +190,14 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Sets the button control configuration.
     pub(crate) fn set_button_control_set(&self, set: ButtonControlSet) -> Result<(), String> {
         self.send(CMD_SET_BUTTON_CONTROL_SET, Some(&[0x0A, set as u8]))?;
 
         Ok(())
     }
 
+    /// Returns the current prompt volume.
     pub(crate) fn get_prompt_volume(&self) -> Result<u8, String> {
         let response = self.send(CMD_GET_PROMPT_VOLUME, None)?;
         let result = response.payload().unwrap()[0];
@@ -180,6 +205,7 @@ impl EdifierClient {
         Ok(result)
     }
 
+    /// Sets the prompt volume.
     pub(crate) fn set_prompt_volume(&self, volume: u8) -> Result<(), String> {
         if volume > MAX_PROMPT_VOLUME {
             err!("Prompt volume must be from 0 to {MAX_PROMPT_VOLUME}.")
@@ -190,24 +216,28 @@ impl EdifierClient {
         }
     }
 
-    pub(crate) fn re_pair(&self) -> Result<(), String> {
+    /// Puts the device into re-pairing mode.
+    pub(crate) fn unpair(&self) -> Result<(), String> {
         self.send(CMD_RE_PAIR, None)?;
 
         Ok(())
     }
 
+    /// Disconnects the current Bluetooth connection from the device side.
     pub(crate) fn disconnect_bluetooth(&self) -> Result<(), String> {
         self.send(CMD_DISCONNECT_BLUETOOTH, None)?;
 
         Ok(())
     }
 
+    /// Powers off the device.
     pub(crate) fn power_off(&self) -> Result<(), String> {
         self.send(CMD_POWER_OFF, None)?;
 
         Ok(())
     }
 
+    /// Resets the device to factory defaults.
     pub(crate) fn reset_factory_defaults(&self) -> Result<(), String> {
         self.send(CMD_RESET_FACTORY_DEFAULTS, None)?;
 
@@ -238,13 +268,13 @@ impl Drop for EdifierClient {
 }
 
 /*
-#[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
-#[repr(u8)]
-#[strum(ascii_case_insensitive)]
-pub enum PlaybackStatus {
-    Stopped = 0x03,
-    Playing = 0x0D,
-}
+    #[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
+    #[repr(u8)]
+    #[strum(ascii_case_insensitive)]
+    pub enum PlaybackStatus {
+        Stopped = 0x03,
+        Playing = 0x0D,
+    }
 */
 
 #[derive(Debug, Copy, Clone, FromRepr, EnumString, Display)]
@@ -302,6 +332,7 @@ impl DenoiseMode {
         }
     }
 
+    /// Returns the protocol command code for this noise cancellation mode.
     pub fn code(&self) -> u8 {
         match self {
             Off => 0x01,
@@ -379,7 +410,7 @@ pub enum ButtonControlSet {
 
 #[cfg(test)]
 mod test {
-    use crate::device::{ButtonControlSet, DenoiseMode, EdifierClient};
+    use crate::device::{ButtonControlSet, DenoiseMode, EdifierClient, LdacMode};
     use std::sync::{LazyLock, Mutex};
 
     /// Prevents using the same socket in tests simultaneously
@@ -470,6 +501,14 @@ mod test {
     #[test]
     fn test_set_button_control_set() {
         let result = get_client().set_button_control_set(ButtonControlSet::Default);
+
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_ldac_mode() {
+        let result = get_client().set_ldac_mode(LdacMode::K96);
 
         println!("{:?}", result);
         assert!(result.is_ok());
