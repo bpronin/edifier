@@ -1,4 +1,8 @@
-﻿use crate::message::EdifierMessage;
+﻿//! The EdifierClient struct provides a client for establishing a Bluetooth connection
+//! with an Edifier device using its Serial Port Profile (SPP) service.
+//! It allows control over various device features such as game mode, LDAC mode, equalizer presets,
+//! noise cancellation modes, and more.
+use crate::message::EdifierMessage;
 use crate::utils::join_str;
 use crate::{bluetooth, err, utils};
 use std::fmt::{Display, Formatter};
